@@ -11,30 +11,34 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+steps:
+  - name: Checkout
+    uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
+  - name: Set up JDK 17
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: 17
 
-      - name: Grant execute permission for Gradlew
-        run: chmod +x ./gradlew
+  - name: Install SDKMAN and Gradle
+    run: |
+      curl -s "https://get.sdkman.io" | bash
+      source "$HOME/.sdkman/bin/sdkman-init.sh"
+      sdk install gradle 8.5
+      gradle --version
 
-      - name: Set up Android SDK and build
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 33
-          target: google_apis
-          arch: x86_64
-          force-avd-creation: false
-          script: ./gradlew assembleDebug --no-daemon
+  - name: Set up Android SDK and build
+    uses: reactivecircus/android-emulator-runner@v2
+    with:
+      api-level: 33
+      target: google_apis
+      arch: x86_64
+      force-avd-creation: false
+      script: gradle assembleDebug --no-daemon
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+  - name: Upload APK artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: app-debug-apk
+      path: app/build/outputs/apk/debug/*.apk
