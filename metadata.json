@@ -1,0 +1,6 @@
+{
+  "name": "SciCalc",
+  "description": "Scientific calculator with step-by-step mathematical explanations, notes, and a dedicated unit converter.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
