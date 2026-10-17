@@ -21,19 +21,17 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Android SDK (tools + platforms + build-tools)
+      - name: Grant execute permission for Gradlew
+        run: chmod +x ./gradlew
+
+      - name: Set up Android SDK and build
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 33
           target: google_apis
           arch: x86_64
           force-avd-creation: false
-
-      - name: Grant execute permission for Gradlew
-        run: chmod +x ./gradlew
-
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+          script: ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
