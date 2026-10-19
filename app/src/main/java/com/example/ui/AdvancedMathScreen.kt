@@ -15,9 +15,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.math.AlternativeRepresentations
@@ -1062,6 +1067,7 @@ private fun TextbookStatisticsCard(
 ) {
     val statsInput by viewModel.statsInput.collectAsState()
     val statsResult by viewModel.statsResult.collectAsState()
+    val focusManager = LocalFocusManager.current
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
@@ -1091,6 +1097,16 @@ private fun TextbookStatisticsCard(
                     viewModel.solveStatistics()
                 },
                 label = { Text("Data Set (comma separated values)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        focusManager.clearFocus()
+                    }
+                ),
                 modifier = Modifier.fillMaxWidth()
             )
 

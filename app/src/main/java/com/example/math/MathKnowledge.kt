@@ -36,6 +36,54 @@ object MathKnowledge {
         val substitutionExpr: String
     )
 
+    private fun toSuperscript(num: Int): String {
+        val digits = mapOf(
+            '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴',
+            '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹',
+            '-' to '⁻'
+        )
+        return num.toString().map { digits[it] ?: it }.joinToString("")
+    }
+
+    fun substituteVariable(formula: String, value: Int): String {
+        val normalized = MathEngine.normalizeExpression(formula)
+        val varChar = listOf('x', 'X', 'n', 'N', 'k', 'K', 'i', 'I').firstOrNull { ch ->
+            val pattern = Regex("""(?<![a-zA-Z])$ch(?![a-zA-Z])""")
+            pattern.containsMatchIn(normalized)
+        } ?: 'x'
+
+        var s = normalized
+        val coeffRegex = Regex("""(\d+(?:\.\d+)?)\s*$varChar(?![a-zA-Z])""")
+        s = coeffRegex.replace(s) { m ->
+            "${m.groupValues[1]}*($value)"
+        }
+        val standaloneRegex = Regex("""(?<![a-zA-Z])$varChar(?![a-zA-Z])""")
+        s = standaloneRegex.replace(s, "($value)")
+        return s
+    }
+
+    fun formatTermDisplay(formula: String, value: Int): String {
+        var s = formula.trim()
+        if (s.contains("ˣ")) {
+            return s.replace("ˣ", toSuperscript(value))
+        }
+        if (s.contains("ⁿ")) {
+            return s.replace("ⁿ", toSuperscript(value))
+        }
+        val varChar = listOf('x', 'X', 'n', 'N', 'k', 'K', 'i', 'I').firstOrNull { ch ->
+            val pattern = Regex("""(?<![a-zA-Z])$ch(?![a-zA-Z])""")
+            pattern.containsMatchIn(s)
+        } ?: 'x'
+
+        val coeffRegex = Regex("""(\d+(?:\.\d+)?)\s*$varChar(?![a-zA-Z])""")
+        s = coeffRegex.replace(s) { m ->
+            "${m.groupValues[1]}($value)"
+        }
+        val standaloneRegex = Regex("""(?<![a-zA-Z])$varChar(?![a-zA-Z])""")
+        s = standaloneRegex.replace(s, "($value)")
+        return s
+    }
+
     /**
      * Deep mathematical analysis of any summation expression:
      * - Computes first terms and displays substitutions (e.g. 3(1) + 2 = 5)
@@ -65,7 +113,7 @@ object MathKnowledge {
             val x = start + i
             val sub = substituteVariable(cleanFormula, x)
             val tv = try {
-                MathEngine.evaluateSimpleExpression(MathEngine.normalizeExpression(sub), angleMode)
+                MathEngine.evaluateSimpleExpression(MathEngine.normalizeExpression(sub), angleMode, xVal = x.toDouble())
             } catch (_: Exception) {
                 0.0
             }

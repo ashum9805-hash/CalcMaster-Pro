@@ -19,9 +19,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -417,6 +421,17 @@ fun CalculatorScreen(
                         onValueChange = { tempVarInput = it },
                         label = { Text("Value of $varName") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                val v = tempVarInput.toDoubleOrNull() ?: 1.0
+                                if (varName == "x") viewModel.setXVariable(v) else viewModel.setYVariable(v)
+                                showEditVariableDialog = null
+                            }
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
