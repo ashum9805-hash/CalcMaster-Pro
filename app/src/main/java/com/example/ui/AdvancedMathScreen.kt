@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.math.AdvancedSolvers
 import com.example.math.AlternativeRepresentations
 import com.example.math.CalculationResult
 import com.example.ui.components.MathSlot
@@ -34,6 +36,7 @@ import com.example.ui.components.QuickSlotChip
 @Composable
 fun AdvancedMathScreen(
     viewModel: CalculatorViewModel,
+    onOpenHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val activeTab by viewModel.advancedTab.collectAsState()
@@ -55,7 +58,7 @@ fun AdvancedMathScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Textbook Math Formulas",
                     style = MaterialTheme.typography.titleLarge,
@@ -66,6 +69,18 @@ fun AdvancedMathScreen(
                     text = "Fill dedicated mathematical slots directly",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            IconButton(
+                onClick = onOpenHistory,
+                modifier = Modifier.size(36.dp).testTag("advanced_math_history_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = "View calculation history",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
@@ -86,6 +101,20 @@ fun AdvancedMathScreen(
                 label = { Text("Summation (Σ)") },
                 leadingIcon = { Icon(Icons.Default.Functions, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 modifier = Modifier.testTag("tab_summation")
+            )
+            FilterChip(
+                selected = activeTab == AdvancedMathTab.NUMBER_THEORY,
+                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.NUMBER_THEORY) },
+                label = { Text("GCF & LCM") },
+                leadingIcon = { Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                modifier = Modifier.testTag("tab_number_theory")
+            )
+            FilterChip(
+                selected = activeTab == AdvancedMathTab.SEQUENCES,
+                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.SEQUENCES) },
+                label = { Text("Sequences (A.P. & G.P.)") },
+                leadingIcon = { Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                modifier = Modifier.testTag("tab_sequences")
             )
             FilterChip(
                 selected = activeTab == AdvancedMathTab.QUADRATIC,
@@ -137,6 +166,18 @@ fun AdvancedMathScreen(
             when (activeTab) {
                 AdvancedMathTab.SUMMATION -> item {
                     TextbookSummationCard(
+                        viewModel = viewModel,
+                        onShowMore = { res -> activeSolutionForModal = res }
+                    )
+                }
+                AdvancedMathTab.NUMBER_THEORY -> item {
+                    TextbookNumberTheoryCard(
+                        viewModel = viewModel,
+                        onShowMore = { res -> activeSolutionForModal = res }
+                    )
+                }
+                AdvancedMathTab.SEQUENCES -> item {
+                    TextbookSequencesCard(
                         viewModel = viewModel,
                         onShowMore = { res -> activeSolutionForModal = res }
                     )
@@ -1410,6 +1451,359 @@ private fun TextbookExponentialCard(
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// 7. NUMBER THEORY (GCF, LCM, PRIME FACTORIZATION)
+// -------------------------------------------------------------
+@Composable
+fun TextbookNumberTheoryCard(
+    viewModel: CalculatorViewModel,
+    onShowMore: (CalculationResult) -> Unit
+) {
+    val numA by viewModel.ntNumA.collectAsState()
+    val numB by viewModel.ntNumB.collectAsState()
+    val solution by viewModel.numberTheoryResult.collectAsState()
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        modifier = Modifier.fillMaxWidth().testTag("card_number_theory")
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Category, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                    }
+                }
+                Column {
+                    Text("Number Theory Analyzer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("GCF (GCD), LCM, Prime Factors & Coprimality", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            // Interactive slot inputs for integer A and integer B
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Number A", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = numA,
+                        onValueChange = { viewModel.ntNumA.value = it.filter { c -> c.isDigit() } },
+                        singleLine = true,
+                        placeholder = { Text("e.g. 24") },
+                        modifier = Modifier.fillMaxWidth().testTag("input_nt_a")
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Number B", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = numB,
+                        onValueChange = { viewModel.ntNumB.value = it.filter { c -> c.isDigit() } },
+                        singleLine = true,
+                        placeholder = { Text("e.g. 36") },
+                        modifier = Modifier.fillMaxWidth().testTag("input_nt_b")
+                    )
+                }
+            }
+
+            // Quick Preset Chips
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                QuickSlotChip(text = "24 & 36", onClick = {
+                    viewModel.ntNumA.value = "24"
+                    viewModel.ntNumB.value = "36"
+                    viewModel.solveNumberTheory()
+                })
+                QuickSlotChip(text = "48 & 180", onClick = {
+                    viewModel.ntNumA.value = "48"
+                    viewModel.ntNumB.value = "180"
+                    viewModel.solveNumberTheory()
+                })
+                QuickSlotChip(text = "17 & 31", onClick = {
+                    viewModel.ntNumA.value = "17"
+                    viewModel.ntNumB.value = "31"
+                    viewModel.solveNumberTheory()
+                })
+            }
+
+            Button(
+                onClick = { viewModel.solveNumberTheory() },
+                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("btn_solve_number_theory"),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Compute GCF & LCM", fontWeight = FontWeight.Bold)
+            }
+
+            // Results Display
+            if (solution != null) {
+                val sol = solution!!
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (sol.isCoprime) "Coprime Integers (Relatively Prime)" else "Common Divisors Found",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (sol.isCoprime) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                            )
+                            Button(
+                                onClick = {
+                                    val calcRes = CalculationResult(
+                                        expression = "GCF(${sol.a}, ${sol.b}) & LCM(${sol.a}, ${sol.b})",
+                                        resultNumber = sol.gcf.toDouble(),
+                                        formattedResult = "GCF=${sol.gcf}, LCM=${sol.lcm}",
+                                        angleMode = viewModel.angleMode.value,
+                                        steps = sol.steps,
+                                        notes = sol.notes,
+                                        alternatives = AlternativeRepresentations(scientific = "GCF: ${sol.gcf}, LCM: ${sol.lcm}")
+                                    )
+                                    onShowMore(calcRes)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp).testTag("btn_more_number_theory")
+                            ) {
+                                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("More: Steps & Notes", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+
+                        // Prominent GCF & LCM answer boxes
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text("Greatest Common Factor", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text("GCF = ${sol.gcf}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text("Least Common Multiple", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text("LCM = ${sol.lcm}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                                }
+                            }
+                        }
+
+                        // Prime factorizations breakdown
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Text("Prime Factorization:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text("${sol.a} = ${sol.primeFactorizationA}", style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
+                        Text("${sol.b} = ${sol.primeFactorizationB}", style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// 8. SEQUENCES (ARITHMETIC & GEOMETRIC PROGRESSIONS)
+// -------------------------------------------------------------
+@Composable
+fun TextbookSequencesCard(
+    viewModel: CalculatorViewModel,
+    onShowMore: (CalculationResult) -> Unit
+) {
+    val a1 by viewModel.seqFirstTerm.collectAsState()
+    val factor by viewModel.seqDiffOrRatio.collectAsState()
+    val nVal by viewModel.seqTargetN.collectAsState()
+    val isGeometric by viewModel.isSeqGeometric.collectAsState()
+    val solution by viewModel.sequenceResult.collectAsState()
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        modifier = Modifier.fillMaxWidth().testTag("card_sequences")
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Repeat, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                    }
+                }
+                Column {
+                    Text("Sequence & Series Analyzer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Arithmetic Progression (A.P.) & Geometric (G.P.)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            // Progression Type Toggle (Arithmetic vs Geometric)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = !isGeometric,
+                    onClick = { viewModel.isSeqGeometric.value = false },
+                    label = { Text("Arithmetic (a₁ + d)") },
+                    leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    modifier = Modifier.weight(1f).testTag("chip_arithmetic_seq")
+                )
+                FilterChip(
+                    selected = isGeometric,
+                    onClick = { viewModel.isSeqGeometric.value = true },
+                    label = { Text("Geometric (a₁ × r)") },
+                    leadingIcon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    modifier = Modifier.weight(1f).testTag("chip_geometric_seq")
+                )
+            }
+
+            // Interactive inputs
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("First Term (a₁)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = a1,
+                        onValueChange = { viewModel.seqFirstTerm.value = it },
+                        singleLine = true,
+                        placeholder = { Text("3") },
+                        modifier = Modifier.fillMaxWidth().testTag("input_seq_a1")
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(if (isGeometric) "Common Ratio (r)" else "Common Diff (d)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = factor,
+                        onValueChange = { viewModel.seqDiffOrRatio.value = it },
+                        singleLine = true,
+                        placeholder = { Text(if (isGeometric) "2" else "5") },
+                        modifier = Modifier.fillMaxWidth().testTag("input_seq_factor")
+                    )
+                }
+                Column(modifier = Modifier.weight(0.9f)) {
+                    Text("Terms (n)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = nVal,
+                        onValueChange = { viewModel.seqTargetN.value = it.filter { c -> c.isDigit() } },
+                        singleLine = true,
+                        placeholder = { Text("10") },
+                        modifier = Modifier.fillMaxWidth().testTag("input_seq_n")
+                    )
+                }
+            }
+
+            Button(
+                onClick = { viewModel.solveSequence() },
+                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("btn_solve_sequence"),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Analyze Sequence & Sum", fontWeight = FontWeight.Bold)
+            }
+
+            // Solution Presentation
+            if (solution != null) {
+                val sol = solution!!
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${sol.sequenceType} (n = ${sol.targetN})",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Button(
+                                onClick = {
+                                    val calcRes = CalculationResult(
+                                        expression = "${sol.sequenceType}: a₁=${AdvancedSolvers.format(sol.firstTerm)}, ${if (isGeometric) "r" else "d"}=${AdvancedSolvers.format(sol.differenceOrRatio)}, n=${sol.targetN}",
+                                        resultNumber = sol.nthTerm,
+                                        formattedResult = "a_${sol.targetN} = ${AdvancedSolvers.format(sol.nthTerm)}, S_${sol.targetN} = ${AdvancedSolvers.format(sol.sumNTerms)}",
+                                        angleMode = viewModel.angleMode.value,
+                                        steps = sol.steps,
+                                        notes = sol.notes,
+                                        alternatives = AlternativeRepresentations(scientific = "nth: ${AdvancedSolvers.format(sol.nthTerm)}, sum: ${AdvancedSolvers.format(sol.sumNTerms)}")
+                                    )
+                                    onShowMore(calcRes)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp).testTag("btn_more_sequences")
+                            ) {
+                                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("More: Steps & Notes", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+
+                        // Two Column Answer Boxes: nth term and partial sum
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text("Term a_${sol.targetN}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(AdvancedSolvers.format(sol.nthTerm), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text("Sum of ${sol.targetN} Terms (S_n)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(AdvancedSolvers.format(sol.sumNTerms), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                        // Explicit General Formula
+                        Text("General Formula: ${sol.generalFormula}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+
+                        // Sample generated terms preview
+                        Text("Sequence Preview (First ${sol.generatedSequence.size} terms):", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = sol.generatedSequence.joinToString(", ") { AdvancedSolvers.format(it) } + if (sol.targetN > sol.generatedSequence.size) ", ..." else "",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }

@@ -17,18 +17,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import android.content.Context
+import android.content.SharedPreferences
+import com.example.ui.theme.AccentPalette
+import com.example.ui.theme.ThemeMode
+
 enum class AppNavDestination {
     CALCULATOR,
     ADVANCED_MATH,
     UNIT_CONVERTER,
     HISTORY,
-    FORMULAS
+    FORMULAS,
+    SETTINGS
 }
 
 enum class AdvancedMathTab {
     QUADRATIC,
     LINEAR_SYSTEM,
     SUMMATION,
+    NUMBER_THEORY,
+    SEQUENCES,
     EXPONENTIAL,
     CALCULUS,
     STATISTICS
@@ -41,6 +49,63 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     val historyList: StateFlow<List<CalculationEntity>> = dao.getAllHistory()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private val prefs: SharedPreferences = application.getSharedPreferences("calcmaster_settings", Context.MODE_PRIVATE)
+
+    // Settings & Customization
+    private val _themeMode = MutableStateFlow(
+        try {
+            ThemeMode.valueOf(prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name)
+        } catch (_: Exception) {
+            ThemeMode.SYSTEM
+        }
+    )
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    private val _accentPalette = MutableStateFlow(
+        try {
+            AccentPalette.valueOf(prefs.getString("accent_palette", AccentPalette.DEFAULT_BLUE.name) ?: AccentPalette.DEFAULT_BLUE.name)
+        } catch (_: Exception) {
+            AccentPalette.DEFAULT_BLUE
+        }
+    )
+    val accentPalette: StateFlow<AccentPalette> = _accentPalette.asStateFlow()
+
+    private val _decimalPrecision = MutableStateFlow(prefs.getInt("decimal_precision", 8))
+    val decimalPrecision: StateFlow<Int> = _decimalPrecision.asStateFlow()
+
+    private val _vibrationFeedback = MutableStateFlow(prefs.getBoolean("vibration_feedback", true))
+    val vibrationFeedback: StateFlow<Boolean> = _vibrationFeedback.asStateFlow()
+
+    private val _showLivePreview = MutableStateFlow(prefs.getBoolean("show_live_preview", true))
+    val showLivePreview: StateFlow<Boolean> = _showLivePreview.asStateFlow()
+
+    fun setThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        prefs.edit().putString("theme_mode", mode.name).apply()
+    }
+
+    fun setAccentPalette(palette: AccentPalette) {
+        _accentPalette.value = palette
+        prefs.edit().putString("accent_palette", palette.name).apply()
+    }
+
+    fun setDecimalPrecision(precision: Int) {
+        _decimalPrecision.value = precision
+        prefs.edit().putInt("decimal_precision", precision).apply()
+    }
+
+    fun toggleVibrationFeedback() {
+        val next = !_vibrationFeedback.value
+        _vibrationFeedback.value = next
+        prefs.edit().putBoolean("vibration_feedback", next).apply()
+    }
+
+    fun toggleShowLivePreview() {
+        val next = !_showLivePreview.value
+        _showLivePreview.value = next
+        prefs.edit().putBoolean("show_live_preview", next).apply()
+    }
 
     // Navigation State
     private val _currentDestination = MutableStateFlow(AppNavDestination.CALCULATOR)
@@ -182,6 +247,59 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                     expression = "Σ (x=$s to $e) of ($f)",
                     result = sol.formattedSum,
                     angleMode = _angleMode.value.name
+                )
+            )
+        }
+    }
+
+    // Number Theory (GCF, LCM, Primes)
+    val ntNumA = MutableStateFlow("24")
+    val ntNumB = MutableStateFlow("36")
+    private val _numberTheoryResult = MutableStateFlow<AdvancedSolvers.NumberTheorySolution?>(null)
+    val numberTheoryResult: StateFlow<AdvancedSolvers.NumberTheorySolution?> = _numberTheoryResult.asStateFlow()
+
+    fun solveNumberTheory() {
+        val a = ntNumA.value.toLongOrNull() ?: 24L
+        val b = ntNumB.value.toLongOrNull() ?: 36L
+        val sol = AdvancedSolvers.solveNumberTheory(a, b)
+        _numberTheoryResult.value = sol
+
+        viewModelScope.launch {
+            dao.insertCalculation(
+                CalculationEntity(
+                    expression = "GCF($a, $b) & LCM($a, $b)",
+                    result = "GCF=${sol.gcf}, LCM=${sol.lcm}",
+                    angleMode = "NT"
+                )
+            )
+        }
+    }
+
+    // Sequences (Arithmetic & Geometric)
+    val seqFirstTerm = MutableStateFlow("3")
+    val seqDiffOrRatio = MutableStateFlow("5")
+    val seqTargetN = MutableStateFlow("10")
+    val isSeqGeometric = MutableStateFlow(false)
+    private val _sequenceResult = MutableStateFlow<AdvancedSolvers.SequenceSolution?>(null)
+    val sequenceResult: StateFlow<AdvancedSolvers.SequenceSolution?> = _sequenceResult.asStateFlow()
+
+    fun solveSequence() {
+        val a1 = seqFirstTerm.value.toDoubleOrNull() ?: 1.0
+        val factor = seqDiffOrRatio.value.toDoubleOrNull() ?: 2.0
+        val n = seqTargetN.value.toIntOrNull() ?: 10
+        val sol = if (isSeqGeometric.value) {
+            AdvancedSolvers.solveGeometricSequence(a1, factor, n)
+        } else {
+            AdvancedSolvers.solveArithmeticSequence(a1, factor, n)
+        }
+        _sequenceResult.value = sol
+
+        viewModelScope.launch {
+            dao.insertCalculation(
+                CalculationEntity(
+                    expression = "${sol.sequenceType} (a1=$a1, factor=$factor, n=$n)",
+                    result = "a_$n=${AdvancedSolvers.format(sol.nthTerm)}, S_$n=${AdvancedSolvers.format(sol.sumNTerms)}",
+                    angleMode = "SEQ"
                 )
             )
         }

@@ -37,6 +37,7 @@ import com.example.units.UnitConverter
 @Composable
 fun UnitConverterScreen(
     viewModel: CalculatorViewModel,
+    onOpenHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -65,7 +66,7 @@ fun UnitConverterScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Unit Converter",
                     style = MaterialTheme.typography.headlineSmall,
@@ -76,6 +77,18 @@ fun UnitConverterScreen(
                     text = "Accurate multi-unit conversions with step explanations",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            IconButton(
+                onClick = onOpenHistory,
+                modifier = Modifier.size(36.dp).testTag("unit_converter_history_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = "View calculation history",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }

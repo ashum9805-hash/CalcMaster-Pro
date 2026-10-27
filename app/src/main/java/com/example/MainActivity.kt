@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Functions
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,8 +26,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MyApplicationTheme {
-                MainAppContainer()
+            val viewModel: CalculatorViewModel = viewModel()
+            val themeMode by viewModel.themeMode.collectAsState()
+            val accentPalette by viewModel.accentPalette.collectAsState()
+
+            MyApplicationTheme(
+                themeMode = themeMode,
+                accentPalette = accentPalette
+            ) {
+                MainAppContainer(viewModel = viewModel)
             }
         }
     }
@@ -39,7 +46,7 @@ fun MainAppContainer(
 ) {
     val currentDestination by viewModel.currentDestination.collectAsState()
 
-    // Handle back button on secondary screens
+    // Handle back button on secondary screens to return to previous destination
     if (currentDestination != AppNavDestination.CALCULATOR) {
         BackHandler {
             viewModel.setDestination(AppNavDestination.CALCULATOR)
@@ -50,7 +57,7 @@ fun MainAppContainer(
         val isWide = maxWidth >= 600.dp
 
         if (isWide) {
-            // Tablet / Landscape Navigation Rail Layout
+            // Tablet / Landscape Navigation Rail Layout (Decluttered: History moved to top-right on screens)
             Row(modifier = Modifier.fillMaxSize()) {
                 NavigationRail(
                     modifier = Modifier.testTag("app_navigation_rail"),
@@ -79,18 +86,18 @@ fun MainAppContainer(
                         modifier = Modifier.testTag("nav_rail_converter")
                     )
                     NavigationRailItem(
-                        selected = currentDestination == AppNavDestination.HISTORY,
-                        onClick = { viewModel.setDestination(AppNavDestination.HISTORY) },
-                        icon = { Icon(Icons.Default.History, contentDescription = "History") },
-                        label = { Text("History") },
-                        modifier = Modifier.testTag("nav_rail_history")
-                    )
-                    NavigationRailItem(
                         selected = currentDestination == AppNavDestination.FORMULAS,
                         onClick = { viewModel.setDestination(AppNavDestination.FORMULAS) },
                         icon = { Icon(Icons.Default.MenuBook, contentDescription = "Notes & Formulas") },
                         label = { Text("Formulas") },
                         modifier = Modifier.testTag("nav_rail_formulas")
+                    )
+                    NavigationRailItem(
+                        selected = currentDestination == AppNavDestination.SETTINGS,
+                        onClick = { viewModel.setDestination(AppNavDestination.SETTINGS) },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings & Customization") },
+                        label = { Text("Settings") },
+                        modifier = Modifier.testTag("nav_rail_settings")
                     )
                 }
 
@@ -103,7 +110,7 @@ fun MainAppContainer(
                 }
             }
         } else {
-            // Mobile Portrait Bottom Navigation Bar Layout
+            // Mobile Portrait Bottom Navigation Bar Layout (Decluttered to clean 4 primary modes)
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 bottomBar = {
@@ -133,18 +140,18 @@ fun MainAppContainer(
                             modifier = Modifier.testTag("nav_bar_converter")
                         )
                         NavigationBarItem(
-                            selected = currentDestination == AppNavDestination.HISTORY,
-                            onClick = { viewModel.setDestination(AppNavDestination.HISTORY) },
-                            icon = { Icon(Icons.Default.History, contentDescription = "History") },
-                            label = { Text("History") },
-                            modifier = Modifier.testTag("nav_bar_history")
-                        )
-                        NavigationBarItem(
                             selected = currentDestination == AppNavDestination.FORMULAS,
                             onClick = { viewModel.setDestination(AppNavDestination.FORMULAS) },
                             icon = { Icon(Icons.Default.MenuBook, contentDescription = "Notes & Formulas") },
                             label = { Text("Formulas") },
                             modifier = Modifier.testTag("nav_bar_formulas")
+                        )
+                        NavigationBarItem(
+                            selected = currentDestination == AppNavDestination.SETTINGS,
+                            onClick = { viewModel.setDestination(AppNavDestination.SETTINGS) },
+                            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings & Customization") },
+                            label = { Text("Settings") },
+                            modifier = Modifier.testTag("nav_bar_settings")
                         )
                     }
                 }
@@ -171,14 +178,26 @@ private fun ScreenContent(
             CalculatorScreen(
                 viewModel = viewModel,
                 onOpenHistory = { viewModel.setDestination(AppNavDestination.HISTORY) },
-                onOpenAdvancedMath = { viewModel.setDestination(AppNavDestination.ADVANCED_MATH) }
+                onOpenAdvancedMath = { viewModel.setDestination(AppNavDestination.ADVANCED_MATH) },
+                onOpenSettings = { viewModel.setDestination(AppNavDestination.SETTINGS) }
             )
         }
         AppNavDestination.ADVANCED_MATH -> {
-            AdvancedMathScreen(viewModel = viewModel)
+            AdvancedMathScreen(
+                viewModel = viewModel,
+                onOpenHistory = { viewModel.setDestination(AppNavDestination.HISTORY) }
+            )
         }
         AppNavDestination.UNIT_CONVERTER -> {
-            UnitConverterScreen(viewModel = viewModel)
+            UnitConverterScreen(
+                viewModel = viewModel,
+                onOpenHistory = { viewModel.setDestination(AppNavDestination.HISTORY) }
+            )
+        }
+        AppNavDestination.FORMULAS -> {
+            FormulasScreen(
+                onOpenHistory = { viewModel.setDestination(AppNavDestination.HISTORY) }
+            )
         }
         AppNavDestination.HISTORY -> {
             HistoryScreen(
@@ -186,8 +205,11 @@ private fun ScreenContent(
                 onNavigateToCalculator = { viewModel.setDestination(AppNavDestination.CALCULATOR) }
             )
         }
-        AppNavDestination.FORMULAS -> {
-            FormulasScreen()
+        AppNavDestination.SETTINGS -> {
+            SettingsScreen(
+                viewModel = viewModel,
+                onNavigateBack = { viewModel.setDestination(AppNavDestination.CALCULATOR) }
+            )
         }
     }
 }

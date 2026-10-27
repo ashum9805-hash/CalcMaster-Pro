@@ -38,6 +38,7 @@ fun CalculatorScreen(
     viewModel: CalculatorViewModel,
     onOpenHistory: () -> Unit,
     onOpenAdvancedMath: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val expression by viewModel.expression.collectAsState()
@@ -190,6 +191,18 @@ fun CalculatorScreen(
                         Icon(
                             imageVector = Icons.Default.History,
                             contentDescription = "View calculation history",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.size(36.dp).testTag("calculator_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Open Settings & Themes",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )

@@ -2,7 +2,7 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Light Theme Palette
+// Default Blue - Light
 val PrimaryLight = Color(0xFF1E5BB9)
 val OnPrimaryLight = Color(0xFFFFFFFF)
 val PrimaryContainerLight = Color(0xFFD8E2FF)
@@ -25,7 +25,7 @@ val OnSurfaceLight = Color(0xFF1A1C20)
 val SurfaceVariantLight = Color(0xFFE1E2EC)
 val OnSurfaceVariantLight = Color(0xFF44474F)
 
-// Dark Theme Palette - Deep Modern Slate / Indigo
+// Default Blue - Dark
 val PrimaryDark = Color(0xFFADC6FF)
 val OnPrimaryDark = Color(0xFF002E69)
 val PrimaryContainerDark = Color(0xFF004494)
@@ -57,3 +57,29 @@ val CalcClearColorDark = Color(0xFFEF4444)     // Red for Clear/Del
 val CalcClearColorLight = Color(0xFFDC2626)
 val CalcNumberBgDark = Color(0xFF1E2638)       // Sleek number keys
 val CalcNumberBgLight = Color(0xFFF1F5F9)
+
+// --- Preset Theme Color Palettes ---
+
+// 1. Emerald / Forest Green
+val EmeraldPrimaryLight = Color(0xFF006D44)
+val EmeraldPrimaryContainerLight = Color(0xFF90F7BD)
+val EmeraldPrimaryDark = Color(0xFF74DAA2)
+val EmeraldPrimaryContainerDark = Color(0xFF005232)
+
+// 2. Violet / Cyber Purple
+val VioletPrimaryLight = Color(0xFF6F43C0)
+val VioletPrimaryContainerLight = Color(0xFFEADBFF)
+val VioletPrimaryDark = Color(0xFFD3BBFF)
+val VioletPrimaryContainerDark = Color(0xFF5628A6)
+
+// 3. Sunset / Amber Orange
+val SunsetPrimaryLight = Color(0xFF8B5000)
+val SunsetPrimaryContainerLight = Color(0xFFFFDCC1)
+val SunsetPrimaryDark = Color(0xFFFFB77C)
+val SunsetPrimaryContainerDark = Color(0xFF693C00)
+
+// 4. OLED Pitch Black Theme Backgrounds & Surfaces
+val OledBackground = Color(0xFF000000)
+val OledSurface = Color(0xFF080808)
+val OledSurfaceVariant = Color(0xFF141414)
+val OledNumberKeyBg = Color(0xFF121212)

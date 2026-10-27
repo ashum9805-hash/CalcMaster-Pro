@@ -690,4 +690,269 @@ object AdvancedSolvers {
             notes = notes
         )
     }
+
+    // --- 7. Number Theory: GCF (GCD), LCM, Prime Factorization & Coprimality ---
+    data class NumberTheorySolution(
+        val a: Long,
+        val b: Long,
+        val gcf: Long,
+        val lcm: Long,
+        val primeFactorizationA: String,
+        val primeFactorizationB: String,
+        val isCoprime: Boolean,
+        val steps: List<EvaluationStep>,
+        val notes: List<MathNote>
+    )
+
+    private fun computeGcd(a: Long, b: Long): Long {
+        var x = abs(a)
+        var y = abs(b)
+        while (y != 0L) {
+            val t = y
+            y = x % y
+            x = t
+        }
+        return if (x == 0L) 1L else x
+    }
+
+    private fun computePrimeFactorsMap(n: Long): Map<Long, Int> {
+        var num = abs(n)
+        val factors = mutableMapOf<Long, Int>()
+        if (num <= 1L) return factors
+
+        var d = 2L
+        while (d * d <= num) {
+            while (num % d == 0L) {
+                factors[d] = factors.getOrDefault(d, 0) + 1
+                num /= d
+            }
+            d++
+        }
+        if (num > 1L) {
+            factors[num] = factors.getOrDefault(num, 0) + 1
+        }
+        return factors
+    }
+
+    private fun formatPrimeFactors(factors: Map<Long, Int>): String {
+        if (factors.isEmpty()) return "1"
+        return factors.entries.joinToString(" × ") { (p, exp) ->
+            if (exp > 1) "$p^$exp" else "$p"
+        }
+    }
+
+    fun solveNumberTheory(numA: Long, numB: Long): NumberTheorySolution {
+        val a = abs(numA)
+        val b = abs(numB)
+        val gcfVal = computeGcd(a, b)
+        val lcmVal = if (a == 0L || b == 0L) 0L else (a / gcfVal) * b
+
+        val factorsA = computePrimeFactorsMap(a)
+        val factorsB = computePrimeFactorsMap(b)
+        val factAStr = formatPrimeFactors(factorsA)
+        val factBStr = formatPrimeFactors(factorsB)
+        val isCoprime = gcfVal == 1L
+
+        // Euclidean steps trace
+        val euclideanSteps = mutableListOf<String>()
+        var r0 = maxOf(a, b)
+        var r1 = minOf(a, b)
+        if (r1 == 0L) {
+            euclideanSteps.add("$r0 = $r0 × 1 + 0")
+        } else {
+            while (r1 != 0L) {
+                val q = r0 / r1
+                val rem = r0 % r1
+                euclideanSteps.add("$r0 = $r1 × $q + $rem")
+                r0 = r1
+                r1 = rem
+            }
+        }
+
+        val steps = listOf(
+            EvaluationStep(
+                stepNumber = 1,
+                title = "Euclidean Algorithm for GCF(A, B)",
+                subExpression = "GCF($a, $b)",
+                ruleApplied = "Euclidean Division Algorithm",
+                intermediateResult = euclideanSteps.joinToString(" ➔ "),
+                expressionAfter = "GCF = $gcfVal",
+                note = "By repeatedly applying division with remainder, the last non-zero remainder is the greatest common factor."
+            ),
+            EvaluationStep(
+                stepNumber = 2,
+                title = "Prime Factorization",
+                subExpression = "$a = $factAStr, $b = $factBStr",
+                ruleApplied = "Fundamental Theorem of Arithmetic",
+                intermediateResult = "Factors: ($factAStr) and ($factBStr)",
+                expressionAfter = "$a = $factAStr; $b = $factBStr",
+                note = "Every integer greater than 1 has a unique prime factorization."
+            ),
+            EvaluationStep(
+                stepNumber = 3,
+                title = "Least Common Multiple (LCM)",
+                subExpression = "LCM(a, b) = (|a × b|) / GCF(a, b)",
+                ruleApplied = "Product Property of GCF & LCM",
+                intermediateResult = "($a × $b) / $gcfVal = $lcmVal",
+                expressionAfter = "LCM = $lcmVal",
+                note = "The smallest positive integer that is divisible by both $a and $b."
+            )
+        )
+
+        val notes = listOf(
+            MathNote(
+                title = "Fundamental Theorem: GCF × LCM = a × b",
+                content = "For any two positive integers a and b, the product of their greatest common factor and least common multiple always equals the product of the numbers: GCF(a,b) × LCM(a,b) = a × b.",
+                formula = "GCF(a, b) × LCM(a, b) = a × b"
+            ),
+            MathNote(
+                title = if (isCoprime) "Coprime (Relatively Prime)" else "Common Divisors Present",
+                content = if (isCoprime) "$a and $b share no common factors other than 1, making them coprime (relatively prime)." else "$a and $b share common factor $gcfVal.",
+                formula = "GCF($a, $b) = $gcfVal"
+            )
+        )
+
+        return NumberTheorySolution(
+            a = a,
+            b = b,
+            gcf = gcfVal,
+            lcm = lcmVal,
+            primeFactorizationA = factAStr,
+            primeFactorizationB = factBStr,
+            isCoprime = isCoprime,
+            steps = steps,
+            notes = notes
+        )
+    }
+
+    // --- 8. Sequences: Arithmetic & Geometric Analyzer ---
+    data class SequenceSolution(
+        val sequenceType: String, // "Arithmetic" or "Geometric"
+        val firstTerm: Double,
+        val differenceOrRatio: Double,
+        val targetN: Int,
+        val nthTerm: Double,
+        val sumNTerms: Double,
+        val generalFormula: String,
+        val sumFormula: String,
+        val generatedSequence: List<Double>,
+        val steps: List<EvaluationStep>,
+        val notes: List<MathNote>
+    )
+
+    fun solveArithmeticSequence(a1: Double, d: Double, n: Int): SequenceSolution {
+        val count = maxOf(1, minOf(n, 100))
+        val nthTerm = a1 + (count - 1) * d
+        val sum = (count.toDouble() / 2.0) * (2 * a1 + (count - 1) * d)
+
+        val sampleTerms = (1..minOf(count, 8)).map { i -> a1 + (i - 1) * d }
+
+        val steps = listOf(
+            EvaluationStep(
+                stepNumber = 1,
+                title = "General nth Term (Explicit Formula)",
+                subExpression = "a_n = a₁ + (n - 1)d",
+                ruleApplied = "Arithmetic Sequence Explicit Term",
+                intermediateResult = "a_$count = ${format(a1)} + ($count - 1)(${format(d)}) = ${format(nthTerm)}",
+                expressionAfter = "a_$count = ${format(nthTerm)}",
+                note = "Each successive term is formed by adding the constant common difference d = ${format(d)}."
+            ),
+            EvaluationStep(
+                stepNumber = 2,
+                title = "Partial Sum of First n Terms (S_n)",
+                subExpression = "S_n = (n / 2) × (a₁ + a_n)",
+                ruleApplied = "Gauss Arithmetic Series Sum",
+                intermediateResult = "S_$count = ($count / 2) × (${format(a1)} + ${format(nthTerm)}) = ${format(sum)}",
+                expressionAfter = "S_$count = ${format(sum)}",
+                note = "Carl Friedrich Gauss formula pairing symmetrical terms."
+            )
+        )
+
+        val notes = listOf(
+            MathNote(
+                title = "Arithmetic Progression (A.P.)",
+                content = "A sequence where the difference between any two consecutive terms is constant. Linear growth pattern with constant slope equal to d.",
+                formula = "a_n = a₁ + (n - 1)d,  S_n = (n/2)(2a₁ + (n-1)d)"
+            ),
+            MathNote(
+                title = "Recursive Definition",
+                content = "a_n = a_{n-1} + d with base condition a_1 = ${format(a1)}.",
+                formula = "a_n = a_{n-1} + ${format(d)}"
+            )
+        )
+
+        return SequenceSolution(
+            sequenceType = "Arithmetic Sequence",
+            firstTerm = a1,
+            differenceOrRatio = d,
+            targetN = count,
+            nthTerm = nthTerm,
+            sumNTerms = sum,
+            generalFormula = "a_n = ${format(a1)} + (n - 1) × ${format(d)}",
+            sumFormula = "S_n = (n/2) × [2(${format(a1)}) + (n-1)(${format(d)})]",
+            generatedSequence = sampleTerms,
+            steps = steps,
+            notes = notes
+        )
+    }
+
+    fun solveGeometricSequence(a1: Double, r: Double, n: Int): SequenceSolution {
+        val count = maxOf(1, minOf(n, 100))
+        val nthTerm = a1 * r.pow(count - 1.0)
+        val sum = if (r == 1.0) {
+            a1 * count
+        } else {
+            a1 * (1.0 - r.pow(count.toDouble())) / (1.0 - r)
+        }
+
+        val sampleTerms = (1..minOf(count, 8)).map { i -> a1 * r.pow(i - 1.0) }
+
+        val steps = listOf(
+            EvaluationStep(
+                stepNumber = 1,
+                title = "General nth Term (Explicit Formula)",
+                subExpression = "a_n = a₁ × r^(n - 1)",
+                ruleApplied = "Geometric Sequence Explicit Term",
+                intermediateResult = "a_$count = ${format(a1)} × (${format(r)})^($count - 1) = ${format(nthTerm)}",
+                expressionAfter = "a_$count = ${format(nthTerm)}",
+                note = "Each successive term is formed by multiplying by the common ratio r = ${format(r)}."
+            ),
+            EvaluationStep(
+                stepNumber = 2,
+                title = "Partial Sum of First n Terms (S_n)",
+                subExpression = if (r == 1.0) "S_n = n × a₁" else "S_n = a₁ × (1 - r^n) / (1 - r)",
+                ruleApplied = "Geometric Series Sum",
+                intermediateResult = "S_$count = ${format(sum)}",
+                expressionAfter = "S_$count = ${format(sum)}",
+                note = if (abs(r) < 1.0) "Since |r| < 1, this series converges! Infinite sum S_∞ = a₁ / (1 - r) = ${format(a1 / (1.0 - r))}." else "Since |r| ≥ 1, the series diverges as n → ∞."
+            )
+        )
+
+        val notes = listOf(
+            MathNote(
+                title = "Geometric Progression (G.P.)",
+                content = "A sequence where each term is obtained by multiplying the previous term by a fixed, non-zero common ratio r.",
+                formula = "a_n = a₁ × r^(n-1),  S_n = a₁(1 - rⁿ) / (1 - r)"
+            ),
+            MathNote(
+                title = if (abs(r) < 1.0) "Convergent Infinite Series" else "Divergent Growth",
+                content = if (abs(r) < 1.0) "Because |r| < 1, adding infinitely many terms approaches the finite limit S_∞ = a₁ / (1 - r) = ${format(a1 / (1.0 - r))}." else "Because |r| ≥ 1, the magnitude of terms does not shrink to 0; infinite sum diverges.",
+                formula = if (abs(r) < 1.0) "S_∞ = ${format(a1)} / (1 - ${format(r)}) = ${format(a1 / (1.0 - r))}" else "Diverges"
+            )
+        )
+
+        return SequenceSolution(
+            sequenceType = "Geometric Sequence",
+            firstTerm = a1,
+            differenceOrRatio = r,
+            targetN = count,
+            nthTerm = nthTerm,
+            sumNTerms = sum,
+            generalFormula = "a_n = ${format(a1)} × (${format(r)})^(n - 1)",
+            sumFormula = if (r == 1.0) "S_n = n × ${format(a1)}" else "S_n = ${format(a1)} × (1 - (${format(r)})ⁿ) / (1 - ${format(r)})",
+            generatedSequence = sampleTerms,
+            steps = steps,
+            notes = notes
+        )
+    }
 }
