@@ -3,9 +3,12 @@ package com.example.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -219,20 +222,22 @@ fun CalculatorScreen(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.Bottom
             ) {
-                // Expression display
+                // Expression display (Supports multi-line expressions without horizontal cramping or overlapping)
+                val lineCount = expression.count { it == '\n' } + 1
                 Text(
                     text = if (expression.isEmpty()) "0" else expression,
                     style = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize = if (expression.length > 20) 20.sp else 26.sp
+                        fontSize = if (lineCount > 2) 18.sp else if (expression.length > 20) 20.sp else 26.sp,
+                        lineHeight = if (lineCount > 2) 24.sp else if (expression.length > 20) 26.sp else 32.sp
                     ),
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Medium,
                     color = if (expression.isEmpty()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.End,
-                    maxLines = 2,
+                    maxLines = 6,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(exprScrollState)
+                        .verticalScroll(exprScrollState)
                         .testTag("calculator_expression_display")
                 )
 
@@ -258,6 +263,8 @@ fun CalculatorScreen(
                         maxLines = 1,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { viewModel.commitResult() }
                             .testTag("calculator_result_display")
                     )
                 } else {
@@ -335,27 +342,56 @@ fun CalculatorScreen(
                                 )
                             }
                         }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { viewModel.onIndent() }
+                                .testTag("chip_indent")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "⇥ Indent",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
 
-                    // "More" Button for step-by-step breakdown
+                    // "More" Button for step-by-step breakdown - Automatically visible when expression has a result!
+                    val isFinished = calculationResult != null || livePreview != null
                     AnimatedVisibility(
-                        visible = calculationResult != null,
+                        visible = isFinished,
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
                         Button(
-                            onClick = { viewModel.openSolutionSheet() },
+                            onClick = {
+                                if (calculationResult == null && livePreview != null) {
+                                    viewModel.onEvaluate()
+                                }
+                                viewModel.openSolutionSheet()
+                            },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = MaterialTheme.colorScheme.onPrimary
                             ),
                             shape = RoundedCornerShape(16.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
                             modifier = Modifier.height(34.dp).testTag("more_solution_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MenuBook,
-                                contentDescription = null,
+                                contentDescription = "View step-by-step breakdown and notes",
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -572,7 +608,7 @@ private fun MainKeypad(
             )
         }
 
-        // Row 5: ±, 0, ., =
+        // Row 5: ±, 0, ., ↵ (Enter), =
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalArrangement = Arrangement.spacedBy(5.dp)
@@ -593,10 +629,19 @@ private fun MainKeypad(
                 modifier = Modifier.weight(1f).testTag("btn_dot")
             )
             CalcButton(
+                text = "↵",
+                textColor = MaterialTheme.colorScheme.primary,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                onClick = { viewModel.onEnter() },
+                onLongClick = { viewModel.onIndent() },
+                modifier = Modifier.weight(1f).testTag("btn_enter")
+            )
+            CalcButton(
                 text = "=",
                 textColor = MaterialTheme.colorScheme.onTertiary,
                 containerColor = MaterialTheme.colorScheme.tertiary,
-                onClick = { viewModel.onEvaluate() },
+                onClick = { viewModel.onEqualsPress() },
+                onLongClick = { viewModel.onEvaluate() },
                 modifier = Modifier.weight(1f).testTag("btn_equals")
             )
         }
@@ -837,6 +882,7 @@ private fun SciButton(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CalcButton(
     text: String? = null,
@@ -844,13 +890,17 @@ private fun CalcButton(
     textColor: Color,
     containerColor: Color,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier
             .fillMaxHeight()
             .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         color = containerColor,
         shape = RoundedCornerShape(12.dp)
     ) {

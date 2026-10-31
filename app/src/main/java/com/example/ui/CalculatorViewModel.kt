@@ -475,23 +475,51 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     fun onDelete() {
         val curr = _expression.value
         if (curr.isNotEmpty()) {
-            val fns = listOf(
-                "asin(", "acos(", "atan(", "sinh(", "cosh(", "tanh(",
-                "sin(", "cos(", "tan(", "sqrt(", "cbrt(", "log2(", "log(", "ln(", "abs(",
-                "nCr(", "nPr(", "gcd(", "lcm(", "√(", "∛("
-            )
-            var matchedFn = false
-            for (fn in fns) {
-                if (curr.endsWith(fn)) {
-                    _expression.value = curr.dropLast(fn.length)
-                    matchedFn = true
-                    break
+            if (curr.endsWith("    ")) {
+                _expression.value = curr.dropLast(4)
+            } else if (curr.endsWith("  ")) {
+                _expression.value = curr.dropLast(2)
+            } else if (curr.endsWith("\n")) {
+                _expression.value = curr.dropLast(1)
+            } else {
+                val fns = listOf(
+                    " = ", "= ", "=", "asin(", "acos(", "atan(", "sinh(", "cosh(", "tanh(",
+                    "sin(", "cos(", "tan(", "sqrt(", "cbrt(", "log2(", "log(", "ln(", "abs(",
+                    "nCr(", "nPr(", "gcd(", "lcm(", "√(", "∛("
+                )
+                var matchedFn = false
+                for (fn in fns) {
+                    if (curr.endsWith(fn)) {
+                        _expression.value = curr.dropLast(fn.length)
+                        matchedFn = true
+                        break
+                    }
+                }
+                if (!matchedFn) {
+                    _expression.value = curr.dropLast(1)
                 }
             }
-            if (!matchedFn) {
-                _expression.value = curr.dropLast(1)
-            }
         }
+        computeLivePreview()
+    }
+
+    /**
+     * Inserts a newline (Enter / ↵) to start a new line in a multi-line expression.
+     */
+    fun onEnter() {
+        val curr = _expression.value
+        if (curr.isNotEmpty() && !curr.endsWith("\n")) {
+            _expression.value = "$curr\n"
+            computeLivePreview()
+        }
+    }
+
+    /**
+     * Inserts a 2-space indentation (Indent / ⇥) for multi-line expressions.
+     */
+    fun onIndent() {
+        val curr = _expression.value
+        _expression.value = "$curr  "
         computeLivePreview()
     }
 
@@ -518,6 +546,55 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     fun closeSolutionSheet() {
         _showSolutionDialog.value = false
+    }
+
+    /**
+     * Handles '=' press: allows typing '=' as an expression to write equations directly,
+     * evaluates when expression ends with '=' or is a completed equation.
+     */
+    fun onEqualsPress() {
+        val expr = _expression.value.trim()
+        if (expr.isEmpty()) return
+
+        if (!expr.contains("=")) {
+            // Write '=' into expression directly so users can type equations (e.g., 2x + 4 = 10)
+            val spacePrefix = if (_expression.value.endsWith(" ")) "" else " "
+            onAppend("$spacePrefix= ")
+        } else {
+            // Expression already has '='
+            if (expr.endsWith("=")) {
+                // User entered trailing '=' (e.g., "5 + 3 = ") and pressed '=' again -> commit answer!
+                val lhs = expr.dropLast(1).trim()
+                if (lhs.isNotEmpty()) {
+                    onEvaluate()
+                    val res = _calculationResult.value?.formattedResult
+                    if (res != null && !res.startsWith("Error")) {
+                        _expression.value = res.removePrefix("=").trim()
+                        _calculationResult.value = null
+                        computeLivePreview()
+                    }
+                }
+            } else {
+                // Full equation like 2x + 4 = 10 -> solve and store to history
+                onEvaluate()
+            }
+        }
+    }
+
+    /**
+     * Commits current live preview or evaluated result as the new base expression
+     */
+    fun commitResult() {
+        val res = _calculationResult.value?.formattedResult ?: _livePreview.value
+        if (res != null && !res.startsWith("Error")) {
+            val clean = res.removePrefix("=").trim()
+            if (clean.isNotEmpty()) {
+                onEvaluate()
+                _expression.value = clean
+                _calculationResult.value = null
+                computeLivePreview()
+            }
+        }
     }
 
     fun onEvaluate() {
@@ -548,17 +625,44 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun computeLivePreview() {
         val expr = _expression.value.trim()
-        if (expr.length > 1 && !expr.endsWith("+") && !expr.endsWith("−") && !expr.endsWith("×") && !expr.endsWith("÷")) {
+        if (expr.isNotEmpty() && !expr.endsWith("+") && !expr.endsWith("−") && !expr.endsWith("×") && !expr.endsWith("÷")) {
             try {
-                val eval = MathEngine.evaluateSimpleExpression(
-                    expression = MathEngine.normalizeExpression(expr),
-                    angleMode = _angleMode.value,
-                    xVal = _xVariable.value,
-                    yVal = _yVariable.value
-                )
-                if (eval.isFinite()) {
-                    _livePreview.value = "= " + MathEngine.formatNumber(eval)
-                    return
+                if (expr.endsWith("=")) {
+                    val sub = expr.dropLast(1).trim()
+                    if (sub.isNotEmpty()) {
+                        val eval = MathEngine.evaluateSimpleExpression(
+                            expression = MathEngine.normalizeExpression(sub),
+                            angleMode = _angleMode.value,
+                            xVal = _xVariable.value,
+                            yVal = _yVariable.value
+                        )
+                        if (eval.isFinite()) {
+                            _livePreview.value = "= " + MathEngine.formatNumber(eval)
+                            return
+                        }
+                    }
+                } else if (expr.contains("=")) {
+                    val preview = MathEngine.solveEquationQuickPreview(
+                        rawEquation = expr,
+                        angleMode = _angleMode.value,
+                        defaultX = _xVariable.value,
+                        defaultY = _yVariable.value
+                    )
+                    if (preview != null) {
+                        _livePreview.value = preview
+                        return
+                    }
+                } else {
+                    val eval = MathEngine.evaluateSimpleExpression(
+                        expression = MathEngine.normalizeExpression(expr),
+                        angleMode = _angleMode.value,
+                        xVal = _xVariable.value,
+                        yVal = _yVariable.value
+                    )
+                    if (eval.isFinite()) {
+                        _livePreview.value = "= " + MathEngine.formatNumber(eval)
+                        return
+                    }
                 }
             } catch (_: Exception) {}
         }

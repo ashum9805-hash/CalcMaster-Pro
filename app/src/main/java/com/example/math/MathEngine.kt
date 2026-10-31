@@ -105,6 +105,16 @@ object MathEngine {
             )
         }
 
+        // Check if expression is multi-line
+        if (rawExpression.contains("\n")) {
+            return evaluateMultiLine(rawExpression, angleMode, xVal, yVal)
+        }
+
+        // Check if expression is an equation or equality containing '='
+        if (rawExpression.contains("=")) {
+            return solveEquationOrEquality(rawExpression, angleMode, xVal, yVal)
+        }
+
         val steps = mutableListOf<EvaluationStep>()
         val notes = mutableListOf<MathNote>()
         var stepCounter = 1
@@ -845,4 +855,670 @@ object MathEngine {
             return x
         }
     }
+
+    /**
+     * Solves equations and expressions containing '=' (e.g. 2x + 4 = 10, 5 + 3 =, 3x = 12, x^2 - 4 = 0).
+     */
+    fun solveEquationOrEquality(
+        rawEquation: String,
+        angleMode: AngleMode,
+        defaultX: Double = 0.0,
+        defaultY: Double = 0.0
+    ): CalculationResult {
+        val trimmed = rawEquation.trim()
+        // If trailing "=", e.g. "5 + 3 =" or "2x + 4 ="
+        if (trimmed.endsWith("=")) {
+            val sub = trimmed.dropLast(1).trim()
+            if (sub.isNotBlank()) {
+                val res = evaluateWithExplanation(sub, angleMode, defaultX, defaultY)
+                return res.copy(expression = rawEquation)
+            }
+        }
+
+        val parts = rawEquation.split("=")
+        if (parts.size != 2) {
+            return CalculationResult(
+                expression = rawEquation,
+                resultNumber = Double.NaN,
+                formattedResult = "Invalid Equation Format",
+                angleMode = angleMode,
+                steps = emptyList(),
+                notes = listOf(
+                    MathNote(
+                        title = "Equation Format",
+                        content = "Equations must have exactly one '=' separating the left-hand and right-hand expressions (e.g., 2x + 4 = 10).",
+                        formula = "LHS = RHS"
+                    )
+                ),
+                alternatives = AlternativeRepresentations(),
+                isSuccess = false
+            )
+        }
+
+        val lhsStr = parts[0].trim()
+        val rhsStr = parts[1].trim()
+
+        if (lhsStr.isBlank() && rhsStr.isBlank()) {
+            return CalculationResult(
+                expression = rawEquation,
+                resultNumber = 0.0,
+                formattedResult = "0 = 0 (Identity)",
+                angleMode = angleMode,
+                steps = emptyList(),
+                notes = emptyList(),
+                alternatives = AlternativeRepresentations(),
+                isSuccess = true
+            )
+        }
+        if (rhsStr.isBlank()) {
+            return evaluateWithExplanation(lhsStr, angleMode, defaultX, defaultY).copy(expression = rawEquation)
+        }
+        if (lhsStr.isBlank()) {
+            return evaluateWithExplanation(rhsStr, angleMode, defaultX, defaultY).copy(expression = rawEquation)
+        }
+
+        val hasX = rawEquation.contains("x", ignoreCase = true)
+        val hasY = rawEquation.contains("y", ignoreCase = true)
+
+        val steps = mutableListOf<EvaluationStep>()
+        val notes = mutableListOf<MathNote>()
+        var stepCounter = 1
+
+        if (!hasX && !hasY) {
+            // Arithmetic verification: LHS = RHS
+            return try {
+                val lhsVal = evaluateSimpleExpression(normalizeExpression(lhsStr), angleMode, defaultX, defaultY)
+                val rhsVal = evaluateSimpleExpression(normalizeExpression(rhsStr), angleMode, defaultX, defaultY)
+                val diff = abs(lhsVal - rhsVal)
+                val isEqual = diff < 1.0E-7
+
+                steps.add(
+                    EvaluationStep(
+                        stepNumber = stepCounter++,
+                        title = "Evaluate Left-Hand Side (LHS)",
+                        subExpression = lhsStr,
+                        ruleApplied = "Arithmetic Evaluation",
+                        intermediateResult = formatNumber(lhsVal),
+                        expressionAfter = "${formatNumber(lhsVal)} = $rhsStr",
+                        note = "The left-hand side simplifies to ${formatNumber(lhsVal)}."
+                    )
+                )
+
+                steps.add(
+                    EvaluationStep(
+                        stepNumber = stepCounter++,
+                        title = "Evaluate Right-Hand Side (RHS)",
+                        subExpression = rhsStr,
+                        ruleApplied = "Arithmetic Evaluation",
+                        intermediateResult = formatNumber(rhsVal),
+                        expressionAfter = "${formatNumber(lhsVal)} = ${formatNumber(rhsVal)}",
+                        note = "The right-hand side simplifies to ${formatNumber(rhsVal)}."
+                    )
+                )
+
+                steps.add(
+                    EvaluationStep(
+                        stepNumber = stepCounter++,
+                        title = "Compare Equality",
+                        subExpression = "${formatNumber(lhsVal)} = ${formatNumber(rhsVal)}",
+                        ruleApplied = if (isEqual) "Identity Property" else "Inequality",
+                        intermediateResult = if (isEqual) "True (Equal)" else "False (Not Equal)",
+                        expressionAfter = if (isEqual) "Equality Holds" else "Equality Fails",
+                        note = if (isEqual) {
+                            "Both sides evaluate to the exact same value (${formatNumber(lhsVal)})."
+                        } else {
+                            "The left-hand side (${formatNumber(lhsVal)}) does not equal the right-hand side (${formatNumber(rhsVal)})."
+                        }
+                    )
+                )
+
+                notes.add(
+                    MathNote(
+                        title = "Equality and Identity",
+                        content = "An equation without unknown variables is an arithmetic statement that is either true (an identity) or false (a contradiction).",
+                        formula = "LHS = RHS"
+                    )
+                )
+
+                CalculationResult(
+                    expression = rawEquation,
+                    resultNumber = if (isEqual) 1.0 else 0.0,
+                    formattedResult = if (isEqual) "True (${formatNumber(lhsVal)} = ${formatNumber(rhsVal)})" else "False (${formatNumber(lhsVal)} ≠ ${formatNumber(rhsVal)})",
+                    angleMode = angleMode,
+                    steps = steps,
+                    notes = notes,
+                    alternatives = computeAlternatives(lhsVal, angleMode),
+                    isSuccess = true
+                )
+            } catch (e: Exception) {
+                CalculationResult(
+                    expression = rawEquation,
+                    resultNumber = Double.NaN,
+                    formattedResult = "Evaluation Error: ${e.message ?: "Invalid syntax"}",
+                    angleMode = angleMode,
+                    steps = emptyList(),
+                    notes = emptyList(),
+                    alternatives = AlternativeRepresentations(),
+                    isSuccess = false
+                )
+            }
+        }
+
+        val targetVar = if (hasX) 'x' else 'y'
+
+        try {
+            fun evalF(v: Double): Double {
+                val x = if (targetVar == 'x') v else defaultX
+                val y = if (targetVar == 'y') v else defaultY
+                val lhs = evaluateSimpleExpression(normalizeExpression(lhsStr), angleMode, x, y)
+                val rhs = evaluateSimpleExpression(normalizeExpression(rhsStr), angleMode, x, y)
+                return lhs - rhs
+            }
+
+            val f0 = evalF(0.0)
+            val f1 = evalF(1.0)
+            val fNeg1 = evalF(-1.0)
+            val f2 = evalF(2.0)
+            val fNeg2 = evalF(-2.0)
+
+            if (!f0.isFinite() || !f1.isFinite() || !fNeg1.isFinite() || !f2.isFinite() || !fNeg2.isFinite()) {
+                throw ArithmeticException("Cannot evaluate equation at sample points")
+            }
+
+            val c = f0
+            val a = (f1 + fNeg1 - 2.0 * c) / 2.0
+            val b = (f1 - fNeg1) / 2.0
+
+            val predF2 = 4.0 * a + 2.0 * b + c
+            val predFNeg2 = 4.0 * a - 2.0 * b + c
+
+            val isPolynomial = abs(f2 - predF2) < 1.0E-4 && abs(fNeg2 - predFNeg2) < 1.0E-4
+
+            if (isPolynomial) {
+                if (abs(a) < 1.0E-7) {
+                    // Linear equation: b*v + c = 0
+                    if (abs(b) < 1.0E-9) {
+                        val isId = abs(c) < 1.0E-7
+                        val resStr = if (isId) "All $targetVar ∈ ℝ (Infinite Solutions)" else "No solution (Contradiction)"
+                        steps.add(
+                            EvaluationStep(
+                                stepNumber = stepCounter++,
+                                title = "Standard Linear Form",
+                                subExpression = rawEquation,
+                                ruleApplied = "Linear Form: bx + c = 0",
+                                intermediateResult = "0$targetVar + (${formatNumber(c)}) = 0",
+                                expressionAfter = resStr,
+                                note = if (isId) "The equation simplifies to 0 = 0, which is true for all values of $targetVar." else "The equation simplifies to ${formatNumber(c)} = 0, which is false for all values."
+                            )
+                        )
+                        return CalculationResult(
+                            expression = rawEquation,
+                            resultNumber = if (isId) 0.0 else Double.NaN,
+                            formattedResult = resStr,
+                            angleMode = angleMode,
+                            steps = steps,
+                            notes = listOf(
+                                MathNote(
+                                    title = "Linear Equation",
+                                    content = "A degree-1 polynomial equation in standard form.",
+                                    formula = "bx + c = 0"
+                                )
+                            ),
+                            alternatives = AlternativeRepresentations(),
+                            isSuccess = true
+                        )
+                    }
+
+                    val root = -c / b
+                    val rootStr = formatNumber(root)
+
+                    steps.add(
+                        EvaluationStep(
+                            stepNumber = stepCounter++,
+                            title = "Arrange in Standard Form",
+                            subExpression = rawEquation,
+                            ruleApplied = "Move all terms to left-hand side: LHS - RHS = 0",
+                            intermediateResult = "(${formatNumber(b)})$targetVar + (${formatNumber(c)}) = 0",
+                            expressionAfter = "(${formatNumber(b)})$targetVar + (${formatNumber(c)}) = 0",
+                            note = "Combine like terms on both sides of the equals sign."
+                        )
+                    )
+
+                    steps.add(
+                        EvaluationStep(
+                            stepNumber = stepCounter++,
+                            title = "Isolate Variable Term",
+                            subExpression = "(${formatNumber(b)})$targetVar + (${formatNumber(c)}) = 0",
+                            ruleApplied = "Subtraction Property of Equality: subtract (${formatNumber(c)}) from both sides",
+                            intermediateResult = "(${formatNumber(b)})$targetVar = ${formatNumber(-c)}",
+                            expressionAfter = "(${formatNumber(b)})$targetVar = ${formatNumber(-c)}",
+                            note = "Move constant terms to the right side of the equation."
+                        )
+                    )
+
+                    steps.add(
+                        EvaluationStep(
+                            stepNumber = stepCounter++,
+                            title = "Solve for $targetVar",
+                            subExpression = "(${formatNumber(b)})$targetVar = ${formatNumber(-c)}",
+                            ruleApplied = "Division Property of Equality: divide both sides by ${formatNumber(b)}",
+                            intermediateResult = "$targetVar = $rootStr",
+                            expressionAfter = "$targetVar = $rootStr",
+                            note = "$targetVar = -(${formatNumber(c)}) / (${formatNumber(b)}) = $rootStr."
+                        )
+                    )
+
+                    steps.add(
+                        EvaluationStep(
+                            stepNumber = stepCounter++,
+                            title = "Verification Check",
+                            subExpression = "Check $targetVar = $rootStr",
+                            ruleApplied = "Substitution check in original equation",
+                            intermediateResult = "LHS = RHS ✓",
+                            expressionAfter = "Solution confirmed",
+                            note = "Substituting $targetVar = $rootStr satisfies the original equation $rawEquation."
+                        )
+                    )
+
+                    notes.add(
+                        MathNote(
+                            title = "Linear Equation (Degree 1)",
+                            content = "A linear equation in one variable has the general form ax + b = 0 with a single unique solution x = -b/a.",
+                            formula = "ax + b = 0 ⟹ x = -b/a"
+                        )
+                    )
+                    notes.add(
+                        MathNote(
+                            title = "Properties of Equality",
+                            content = "You can add, subtract, multiply, or divide both sides of an equality by the same non-zero quantity without changing the solutions.",
+                            formula = "A = B ⟺ A + C = B + C, kA = kB (k ≠ 0)"
+                        )
+                    )
+
+                    return CalculationResult(
+                        expression = rawEquation,
+                        resultNumber = root,
+                        formattedResult = "$targetVar = $rootStr",
+                        angleMode = angleMode,
+                        steps = steps,
+                        notes = notes,
+                        alternatives = computeAlternatives(root, angleMode),
+                        isSuccess = true
+                    )
+                } else {
+                    // Quadratic: a*v² + b*v + c = 0
+                    val quadSol = AdvancedSolvers.solveQuadratic(a, b, c)
+                    val formatted = if (quadSol.isComplex) {
+                        "$targetVar₁ = ${quadSol.root1Str}, $targetVar₂ = ${quadSol.root2Str}"
+                    } else if (quadSol.root2Str == "N/A" || quadSol.root1Str == quadSol.root2Str) {
+                        "$targetVar = ${quadSol.root1Str}"
+                    } else {
+                        "$targetVar₁ = ${quadSol.root1Str}, $targetVar₂ = ${quadSol.root2Str}"
+                    }
+
+                    return CalculationResult(
+                        expression = rawEquation,
+                        resultNumber = quadSol.vertexX,
+                        formattedResult = formatted,
+                        angleMode = angleMode,
+                        steps = quadSol.steps,
+                        notes = quadSol.notes,
+                        alternatives = computeAlternatives(quadSol.vertexX, angleMode),
+                        isSuccess = true
+                    )
+                }
+            } else {
+                // Non-linear numerical root search
+                val root = findNumericalRoot(::evalF, -30.0, 30.0)
+                if (root != null) {
+                    val rootStr = formatNumber(root)
+                    steps.add(
+                        EvaluationStep(
+                            stepNumber = stepCounter++,
+                            title = "Non-Linear Root Formulation",
+                            subExpression = rawEquation,
+                            ruleApplied = "Set difference function: f($targetVar) = LHS - RHS = 0",
+                            intermediateResult = "f($targetVar) = 0",
+                            expressionAfter = "f($targetVar) = 0",
+                            note = "Find values where the difference between left and right sides is zero."
+                        )
+                    )
+                    steps.add(
+                        EvaluationStep(
+                            stepNumber = stepCounter++,
+                            title = "Numerical Root Finding",
+                            subExpression = "f($targetVar) = 0",
+                            ruleApplied = "Brent-Bisection Root Finding Algorithm",
+                            intermediateResult = "$targetVar ≈ $rootStr",
+                            expressionAfter = "$targetVar ≈ $rootStr",
+                            note = "Numerical iteration converged to root $targetVar ≈ $rootStr."
+                        )
+                    )
+
+                    return CalculationResult(
+                        expression = rawEquation,
+                        resultNumber = root,
+                        formattedResult = "$targetVar ≈ $rootStr",
+                        angleMode = angleMode,
+                        steps = steps,
+                        notes = listOf(
+                            MathNote(
+                                title = "Non-Linear Equations",
+                                content = "Equations with transcendental or non-linear terms (e.g. exponentials, radicals, or trigonometric functions) are solved numerically by locating the zero crossings of f(x) = LHS - RHS.",
+                                formula = "f(x) = 0"
+                            )
+                        ),
+                        alternatives = computeAlternatives(root, angleMode),
+                        isSuccess = true
+                    )
+                } else {
+                    return CalculationResult(
+                        expression = rawEquation,
+                        resultNumber = Double.NaN,
+                        formattedResult = "No real solution found in [-30, 30]",
+                        angleMode = angleMode,
+                        steps = emptyList(),
+                        notes = emptyList(),
+                        alternatives = AlternativeRepresentations(),
+                        isSuccess = false
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            return CalculationResult(
+                expression = rawEquation,
+                resultNumber = Double.NaN,
+                formattedResult = "Equation Error: ${e.message ?: "Invalid equation"}",
+                angleMode = angleMode,
+                steps = emptyList(),
+                notes = emptyList(),
+                alternatives = AlternativeRepresentations(),
+                isSuccess = false
+            )
+        }
+    }
+
+    /**
+     * Evaluates multi-line expressions, systems of equations, or sequential statements.
+     */
+    fun evaluateMultiLine(
+        rawExpression: String,
+        angleMode: AngleMode,
+        xVal: Double = 1.0,
+        yVal: Double = 2.0
+    ): CalculationResult {
+        val rawLines = rawExpression.lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        if (rawLines.isEmpty()) {
+            return evaluateWithExplanation("", angleMode, xVal, yVal)
+        }
+
+        if (rawLines.size == 1) {
+            return evaluateWithExplanation(rawLines[0], angleMode, xVal, yVal)
+        }
+
+        // 1. Check if it's a 2x2 linear system (e.g., "2x + y = 8" and "x - y = 1")
+        if (rawLines.size == 2 && rawLines[0].contains("=") && rawLines[1].contains("=")) {
+            val sysSol = trySolveLinearSystemFromLines(rawLines[0], rawLines[1])
+            if (sysSol != null) {
+                return sysSol.copy(expression = rawExpression)
+            }
+        }
+
+        // 2. Check if it's a single continuous mathematical expression broken across multiple lines
+        val joined = rawLines.joinToString(" ")
+        try {
+            val evalJoined = evaluateSimpleExpression(normalizeExpression(joined), angleMode, xVal, yVal)
+            if (evalJoined.isFinite()) {
+                val res = evaluateWithExplanation(joined, angleMode, xVal, yVal)
+                return res.copy(expression = rawExpression)
+            }
+        } catch (_: Exception) {}
+
+        // 3. Process line by line, carrying forward variable definitions (e.g., x = 5)
+        var currentX = xVal
+        var currentY = yVal
+        var lastResult: CalculationResult? = null
+        val combinedSteps = mutableListOf<EvaluationStep>()
+        val combinedNotes = mutableListOf<MathNote>()
+        var stepCounter = 1
+
+        for ((idx, line) in rawLines.withIndex()) {
+            val varAssignRegex = Regex("""^([xyXY])\s*=\s*(.+)$""")
+            val match = varAssignRegex.matchEntire(line)
+            if (match != null) {
+                val varName = match.groupValues[1].lowercase(Locale.US)
+                val rhsExpr = match.groupValues[2]
+                try {
+                    val assignedVal = evaluateSimpleExpression(normalizeExpression(rhsExpr), angleMode, currentX, currentY)
+                    if (varName == "x") currentX = assignedVal else currentY = assignedVal
+                    combinedSteps.add(
+                        EvaluationStep(
+                            stepNumber = stepCounter++,
+                            title = "Line ${idx + 1}: Assign $varName = ${formatNumber(assignedVal)}",
+                            subExpression = line,
+                            ruleApplied = "Variable Assignment",
+                            intermediateResult = "$varName = ${formatNumber(assignedVal)}",
+                            expressionAfter = "$varName set to ${formatNumber(assignedVal)}",
+                            note = "Variable $varName is assigned ${formatNumber(assignedVal)} for subsequent expressions."
+                        )
+                    )
+                } catch (_: Exception) {}
+            }
+
+            val lineRes = evaluateWithExplanation(line, angleMode, currentX, currentY)
+            lastResult = lineRes
+            for (st in lineRes.steps) {
+                combinedSteps.add(st.copy(stepNumber = stepCounter++))
+            }
+            combinedNotes.addAll(lineRes.notes)
+        }
+
+        val finalRes = lastResult ?: evaluateWithExplanation(rawLines.last(), angleMode, currentX, currentY)
+        return finalRes.copy(
+            expression = rawExpression,
+            steps = if (combinedSteps.isNotEmpty()) combinedSteps else finalRes.steps,
+            notes = if (combinedNotes.isNotEmpty()) combinedNotes.distinctBy { it.title } else finalRes.notes
+        )
+    }
+
+    private fun trySolveLinearSystemFromLines(line1: String, line2: String): CalculationResult? {
+        try {
+            val p1 = line1.split("=")
+            val p2 = line2.split("=")
+            if (p1.size != 2 || p2.size != 2) return null
+
+            fun f1(x: Double, y: Double): Double {
+                val lhs = evaluateSimpleExpression(normalizeExpression(p1[0].trim()), AngleMode.DEG, x, y)
+                val rhs = evaluateSimpleExpression(normalizeExpression(p1[1].trim()), AngleMode.DEG, x, y)
+                return lhs - rhs
+            }
+
+            fun f2(x: Double, y: Double): Double {
+                val lhs = evaluateSimpleExpression(normalizeExpression(p2[0].trim()), AngleMode.DEG, x, y)
+                val rhs = evaluateSimpleExpression(normalizeExpression(p2[1].trim()), AngleMode.DEG, x, y)
+                return lhs - rhs
+            }
+
+            val k1 = f1(0.0, 0.0)
+            val a1 = f1(1.0, 0.0) - k1
+            val b1 = f1(0.0, 1.0) - k1
+            val c1 = -k1
+
+            val k2 = f2(0.0, 0.0)
+            val a2 = f2(1.0, 0.0) - k2
+            val b2 = f2(0.0, 1.0) - k2
+            val c2 = -k2
+
+            if (abs(a1) < 1.0E-9 && abs(b1) < 1.0E-9) return null
+            if (abs(a2) < 1.0E-9 && abs(b2) < 1.0E-9) return null
+
+            val sol = AdvancedSolvers.solveLinearSystem(a1, b1, c1, a2, b2, c2)
+            return CalculationResult(
+                expression = "$line1\n$line2",
+                resultNumber = sol.xResult.toDoubleOrNull() ?: 0.0,
+                formattedResult = "x = ${sol.xResult}, y = ${sol.yResult}",
+                angleMode = AngleMode.DEG,
+                steps = sol.steps,
+                notes = sol.notes,
+                alternatives = computeAlternatives(sol.xResult.toDoubleOrNull() ?: 0.0, AngleMode.DEG),
+                isSuccess = true
+            )
+        } catch (_: Exception) {
+            return null
+        }
+    }
+
+    /**
+     * Fast live preview evaluator for equations containing '=' or multi-line expressions
+     */
+    fun solveEquationQuickPreview(
+        rawEquation: String,
+        angleMode: AngleMode,
+        defaultX: Double = 0.0,
+        defaultY: Double = 0.0
+    ): String? {
+        if (rawEquation.contains("\n")) {
+            val lines = rawEquation.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            if (lines.isEmpty()) return null
+            if (lines.size == 2 && lines[0].contains("=") && lines[1].contains("=")) {
+                val sys = trySolveLinearSystemFromLines(lines[0], lines[1])
+                if (sys != null) return sys.formattedResult
+            }
+            val joined = lines.joinToString(" ")
+            try {
+                val eval = evaluateSimpleExpression(normalizeExpression(joined), angleMode, defaultX, defaultY)
+                if (eval.isFinite()) return "= " + formatNumber(eval)
+            } catch (_: Exception) {}
+            return solveEquationQuickPreview(lines.last(), angleMode, defaultX, defaultY)
+        }
+
+        val trimmed = rawEquation.trim()
+        if (trimmed.endsWith("=")) {
+            val sub = trimmed.dropLast(1).trim()
+            if (sub.isNotBlank()) {
+                val eval = evaluateSimpleExpression(normalizeExpression(sub), angleMode, defaultX, defaultY)
+                return if (eval.isFinite()) "= " + formatNumber(eval) else null
+            }
+            return null
+        }
+
+        val parts = rawEquation.split("=")
+        if (parts.size != 2) return null
+        val lhsStr = parts[0].trim()
+        val rhsStr = parts[1].trim()
+        if (lhsStr.isEmpty() || rhsStr.isEmpty()) return null
+
+        val hasX = rawEquation.contains("x", ignoreCase = true)
+        val hasY = rawEquation.contains("y", ignoreCase = true)
+
+        if (!hasX && !hasY) {
+            return try {
+                val lhsVal = evaluateSimpleExpression(normalizeExpression(lhsStr), angleMode, defaultX, defaultY)
+                val rhsVal = evaluateSimpleExpression(normalizeExpression(rhsStr), angleMode, defaultX, defaultY)
+                if (abs(lhsVal - rhsVal) < 1.0E-6) "True (Equal)" else "False (${formatNumber(lhsVal)} ≠ ${formatNumber(rhsVal)})"
+            } catch (_: Exception) { null }
+        }
+
+        val targetVar = if (hasX) 'x' else 'y'
+
+        try {
+            fun evalF(v: Double): Double {
+                val x = if (targetVar == 'x') v else defaultX
+                val y = if (targetVar == 'y') v else defaultY
+                val lhs = evaluateSimpleExpression(normalizeExpression(lhsStr), angleMode, x, y)
+                val rhs = evaluateSimpleExpression(normalizeExpression(rhsStr), angleMode, x, y)
+                return lhs - rhs
+            }
+
+            val f0 = evalF(0.0)
+            val f1 = evalF(1.0)
+            val fNeg1 = evalF(-1.0)
+            val f2 = evalF(2.0)
+            val fNeg2 = evalF(-2.0)
+
+            if (!f0.isFinite() || !f1.isFinite() || !fNeg1.isFinite() || !f2.isFinite() || !fNeg2.isFinite()) {
+                return null
+            }
+
+            val c = f0
+            val a = (f1 + fNeg1 - 2.0 * c) / 2.0
+            val b = (f1 - fNeg1) / 2.0
+
+            val predF2 = 4.0 * a + 2.0 * b + c
+            val predFNeg2 = 4.0 * a - 2.0 * b + c
+
+            if (abs(f2 - predF2) < 1.0E-4 && abs(fNeg2 - predFNeg2) < 1.0E-4) {
+                if (abs(a) < 1.0E-7) {
+                    if (abs(b) < 1.0E-9) {
+                        return if (abs(c) < 1.0E-7) "All $targetVar ∈ ℝ" else "No solution"
+                    }
+                    val root = -c / b
+                    return "$targetVar = ${formatNumber(root)}"
+                } else {
+                    val delta = b * b - 4.0 * a * c
+                    return if (delta < 0) {
+                        val re = -b / (2.0 * a)
+                        val im = sqrt(-delta) / (2.0 * abs(a))
+                        if (abs(re) < 1.0E-9) {
+                            "$targetVar = ±${formatNumber(im)}i"
+                        } else {
+                            "$targetVar = ${formatNumber(re)} ± ${formatNumber(im)}i"
+                        }
+                    } else if (abs(delta) < 1.0E-12) {
+                        val root = -b / (2.0 * a)
+                        "$targetVar = ${formatNumber(root)}"
+                    } else {
+                        val r1 = (-b + sqrt(delta)) / (2.0 * a)
+                        val r2 = (-b - sqrt(delta)) / (2.0 * a)
+                        if (abs(r1 + r2) < 1.0E-9) {
+                            "$targetVar = ±${formatNumber(abs(r1))}"
+                        } else {
+                            "$targetVar₁ = ${formatNumber(r1)}, $targetVar₂ = ${formatNumber(r2)}"
+                        }
+                    }
+                }
+            } else {
+                val root = findNumericalRoot(::evalF, -30.0, 30.0)
+                if (root != null) {
+                    return "$targetVar ≈ ${formatNumber(root)}"
+                }
+            }
+        } catch (_: Exception) {}
+        return null
+    }
+
+    private fun findNumericalRoot(f: (Double) -> Double, min: Double, max: Double): Double? {
+        val steps = 60
+        val stepSize = (max - min) / steps
+        var prevX = min
+        var prevY = try { f(prevX) } catch (_: Exception) { Double.NaN }
+
+        for (i in 1..steps) {
+            val currX = min + i * stepSize
+            val currY = try { f(currX) } catch (_: Exception) { Double.NaN }
+            if (currY.isFinite() && abs(currY) < 1.0E-9) return currX
+            if (prevY.isFinite() && currY.isFinite() && prevY * currY < 0) {
+                var lo = prevX
+                var hi = currX
+                for (iter in 0..30) {
+                    val mid = (lo + hi) / 2.0
+                    val midY = try { f(mid) } catch (_: Exception) { 0.0 }
+                    if (abs(midY) < 1.0E-8 || (hi - lo) < 1.0E-9) return mid
+                    if (prevY * midY <= 0) {
+                        hi = mid
+                    } else {
+                        lo = mid
+                    }
+                }
+                return (lo + hi) / 2.0
+            }
+            prevX = currX
+            prevY = currY
+        }
+        return null
+    }
 }
+

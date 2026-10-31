@@ -23,7 +23,7 @@ data class MathNote(
 
 data class AlternativeRepresentations(
     val fraction: String? = null,
-    val scientific: String,
+    val scientific: String = "N/A",
     val percentage: String? = null,
     val binary: String? = null,
     val hex: String? = null,
