@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.CalculationEntity
 import com.example.math.*
+import com.example.science.ScienceSolvers
 import com.example.units.ConversionResult
 import com.example.units.ConversionUnit
 import com.example.units.UnitCategory
@@ -31,15 +32,31 @@ enum class AppNavDestination {
     SETTINGS
 }
 
-enum class AdvancedMathTab {
-    QUADRATIC,
-    LINEAR_SYSTEM,
-    SUMMATION,
-    NUMBER_THEORY,
-    SEQUENCES,
-    EXPONENTIAL,
-    CALCULUS,
-    STATISTICS
+enum class CalculatorContextMode(val label: String) {
+    MATH("Math"),
+    PHYSICS("Physics"),
+    CHEMISTRY("Chemistry")
+}
+
+enum class AdvancedMathTab(
+    val title: String,
+    val subtitle: String,
+    val category: String
+) {
+    SUMMATION("Summation (Σ)", "Finite & infinite series", "Calculus & Series"),
+    CIRCLES("Circles & Sectors", "Radius, area, arc & chord", "Geometry & Trig"),
+    TRIGONOMETRY("Trigonometry & Triangles", "6 ratios, unit circle & SOH-CAH-TOA", "Geometry & Trig"),
+    SOLIDS_3D("3D Solids Geometry", "Sphere, cylinder, cone & prism", "Geometry & Trig"),
+    QUADRATIC("Quadratic Equation", "ax² + bx + c = 0 roots & vertex", "Algebra & Logs"),
+    LINEAR_SYSTEM("2×2 Linear System", "Simultaneous equations (Cramer's)", "Algebra & Logs"),
+    EXPONENTIAL("Exponential (a·bˣ = c)", "Logarithmic reduction solver", "Algebra & Logs"),
+    LOGARITHM("Logarithm (log_b x)", "Arbitrary base & change of base", "Algebra & Logs"),
+    CALCULUS("Calculus (∫ & d/dx)", "Definite integral & derivative", "Calculus & Series"),
+    SEQUENCES("Sequences (A.P. & G.P.)", "nth term & partial sum", "Calculus & Series"),
+    NUMBER_THEORY("GCF & LCM", "Euclidean steps & prime factors", "Discrete & Stats"),
+    COMBINATORICS("Combinatorics (nPr & nCr)", "Permutations & combinations", "Discrete & Stats"),
+    STATISTICS("Statistics", "Mean, median, mode & std dev", "Discrete & Stats"),
+    PHYSICS_EXPRESSIONS("Physics Expressions", "Circular, force, momentum, gravity & circuits", "Science & Physics")
 }
 
 class CalculatorViewModel(application: Application) : AndroidViewModel(application) {
@@ -385,6 +402,187 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    // --- Circles & Sectors State ---
+    val circleInputType = MutableStateFlow(GeometryTrigSolvers.CircleInputType.RADIUS)
+    val circleValue = MutableStateFlow("5")
+    val circleAngle = MutableStateFlow("60")
+    val circleAngleMode = MutableStateFlow(AngleMode.DEG)
+    private val _circleSolution = MutableStateFlow<GeometryTrigSolvers.CircleSolution?>(null)
+    val circleSolution: StateFlow<GeometryTrigSolvers.CircleSolution?> = _circleSolution.asStateFlow()
+
+    fun solveCircle(logHistory: Boolean = false) {
+        val v = circleValue.value.toDoubleOrNull() ?: 0.0
+        val ang = circleAngle.value.toDoubleOrNull() ?: 60.0
+        val sol = GeometryTrigSolvers.solveCircle(
+            inputType = circleInputType.value,
+            inputValue = v,
+            centralAngleInput = ang,
+            angleMode = circleAngleMode.value
+        )
+        _circleSolution.value = sol
+        if (logHistory && sol.isValid) {
+            viewModelScope.launch {
+                dao.insertCalculation(
+                    CalculationEntity(
+                        expression = "Circle (${circleInputType.value.symbol}=${circleValue.value}, θ=${circleAngle.value})",
+                        result = "r=${AdvancedSolvers.format(sol.radius)}, A=${AdvancedSolvers.format(sol.area)}",
+                        angleMode = circleAngleMode.value.name
+                    )
+                )
+            }
+        }
+    }
+
+    // --- Trigonometry & Triangles State ---
+    // Sub-tab: 0 = Unit Circle & Ratios, 1 = Right Triangle, 2 = General Triangle
+    val trigSubMode = MutableStateFlow(0)
+    val trigAngleInput = MutableStateFlow("45")
+    val trigAngleMode = MutableStateFlow(AngleMode.DEG)
+    private val _trigAngleSolution = MutableStateFlow<GeometryTrigSolvers.TrigAngleSolution?>(null)
+    val trigAngleSolution: StateFlow<GeometryTrigSolvers.TrigAngleSolution?> = _trigAngleSolution.asStateFlow()
+
+    val rightTriMode = MutableStateFlow(GeometryTrigSolvers.RightTriMode.TWO_LEGS)
+    val rightTriVal1 = MutableStateFlow("3")
+    val rightTriVal2 = MutableStateFlow("4")
+    private val _rightTriSolution = MutableStateFlow<GeometryTrigSolvers.RightTriangleSolution?>(null)
+    val rightTriSolution: StateFlow<GeometryTrigSolvers.RightTriangleSolution?> = _rightTriSolution.asStateFlow()
+
+    val generalTriMode = MutableStateFlow(GeometryTrigSolvers.GeneralTriMode.SSS)
+    val generalTriVal1 = MutableStateFlow("5")
+    val generalTriVal2 = MutableStateFlow("7")
+    val generalTriVal3 = MutableStateFlow("8")
+    private val _generalTriSolution = MutableStateFlow<GeometryTrigSolvers.GeneralTriangleSolution?>(null)
+    val generalTriSolution: StateFlow<GeometryTrigSolvers.GeneralTriangleSolution?> = _generalTriSolution.asStateFlow()
+
+    fun solveTrigAngle(logHistory: Boolean = false) {
+        val ang = trigAngleInput.value.toDoubleOrNull() ?: 0.0
+        val sol = GeometryTrigSolvers.solveTrigAngle(ang, trigAngleMode.value)
+        _trigAngleSolution.value = sol
+        if (logHistory) {
+            viewModelScope.launch {
+                dao.insertCalculation(
+                    CalculationEntity(
+                        expression = "Trig(${trigAngleInput.value} ${trigAngleMode.value.name})",
+                        result = "sin=${AdvancedSolvers.format(sol.sinVal)}, cos=${AdvancedSolvers.format(sol.cosVal)}",
+                        angleMode = trigAngleMode.value.name
+                    )
+                )
+            }
+        }
+    }
+
+    fun solveRightTriangle(logHistory: Boolean = false) {
+        val v1 = rightTriVal1.value.toDoubleOrNull() ?: 0.0
+        val v2 = rightTriVal2.value.toDoubleOrNull() ?: 0.0
+        val sol = GeometryTrigSolvers.solveRightTriangle(rightTriMode.value, v1, v2)
+        _rightTriSolution.value = sol
+        if (logHistory && sol.isValid) {
+            viewModelScope.launch {
+                dao.insertCalculation(
+                    CalculationEntity(
+                        expression = "Right △ (${rightTriMode.value.label}: ${rightTriVal1.value}, ${rightTriVal2.value})",
+                        result = "a=${AdvancedSolvers.format(sol.a)}, b=${AdvancedSolvers.format(sol.b)}, c=${AdvancedSolvers.format(sol.c)}",
+                        angleMode = "DEG"
+                    )
+                )
+            }
+        }
+    }
+
+    fun solveGeneralTriangle(logHistory: Boolean = false) {
+        val v1 = generalTriVal1.value.toDoubleOrNull() ?: 0.0
+        val v2 = generalTriVal2.value.toDoubleOrNull() ?: 0.0
+        val v3 = generalTriVal3.value.toDoubleOrNull() ?: 0.0
+        val sol = GeometryTrigSolvers.solveGeneralTriangle(generalTriMode.value, v1, v2, v3)
+        _generalTriSolution.value = sol
+        if (logHistory && sol.isValid) {
+            viewModelScope.launch {
+                dao.insertCalculation(
+                    CalculationEntity(
+                        expression = "Triangle ${generalTriMode.value.name} (${generalTriVal1.value}, ${generalTriVal2.value}, ${generalTriVal3.value})",
+                        result = "A=${AdvancedSolvers.format(sol.angleADeg)}°, Area=${AdvancedSolvers.format(sol.area)}",
+                        angleMode = "DEG"
+                    )
+                )
+            }
+        }
+    }
+
+    // --- 3D Solids State ---
+    val solidType = MutableStateFlow(GeometryTrigSolvers.SolidType.SPHERE)
+    val solidDim1 = MutableStateFlow("4")
+    val solidDim2 = MutableStateFlow("10")
+    val solidDim3 = MutableStateFlow("6")
+    private val _solidSolution = MutableStateFlow<GeometryTrigSolvers.Solid3DSolution?>(null)
+    val solidSolution: StateFlow<GeometryTrigSolvers.Solid3DSolution?> = _solidSolution.asStateFlow()
+
+    fun solveSolid3D(logHistory: Boolean = false) {
+        val d1 = solidDim1.value.toDoubleOrNull() ?: 0.0
+        val d2 = solidDim2.value.toDoubleOrNull() ?: 0.0
+        val d3 = solidDim3.value.toDoubleOrNull() ?: 0.0
+        val sol = GeometryTrigSolvers.solveSolid3D(solidType.value, d1, d2, d3)
+        _solidSolution.value = sol
+        if (logHistory) {
+            viewModelScope.launch {
+                dao.insertCalculation(
+                    CalculationEntity(
+                        expression = "${solidType.value.label} (${solidDim1.value})",
+                        result = "V=${AdvancedSolvers.format(sol.volume)}, A=${AdvancedSolvers.format(sol.surfaceArea)}",
+                        angleMode = "3D"
+                    )
+                )
+            }
+        }
+    }
+
+    // --- Logarithm State ---
+    val logBase = MutableStateFlow("2")
+    val logArg = MutableStateFlow("64")
+    private val _logSolution = MutableStateFlow<GeometryTrigSolvers.LogarithmSolution?>(null)
+    val logSolution: StateFlow<GeometryTrigSolvers.LogarithmSolution?> = _logSolution.asStateFlow()
+
+    fun solveLogarithm(logHistory: Boolean = false) {
+        val b = logBase.value.toDoubleOrNull() ?: 2.0
+        val x = logArg.value.toDoubleOrNull() ?: 8.0
+        val sol = GeometryTrigSolvers.solveLogarithm(b, x)
+        _logSolution.value = sol
+        if (logHistory && sol.isValid) {
+            viewModelScope.launch {
+                dao.insertCalculation(
+                    CalculationEntity(
+                        expression = "log_${logBase.value}(${logArg.value})",
+                        result = sol.formattedResult,
+                        angleMode = "LOG"
+                    )
+                )
+            }
+        }
+    }
+
+    // --- Combinatorics State ---
+    val combN = MutableStateFlow("10")
+    val combR = MutableStateFlow("3")
+    private val _combSolution = MutableStateFlow<GeometryTrigSolvers.CombinatoricsSolution?>(null)
+    val combSolution: StateFlow<GeometryTrigSolvers.CombinatoricsSolution?> = _combSolution.asStateFlow()
+
+    fun solveCombinatorics(logHistory: Boolean = false) {
+        val n = combN.value.toLongOrNull() ?: 0L
+        val r = combR.value.toLongOrNull() ?: 0L
+        val sol = GeometryTrigSolvers.solveCombinatorics(n, r)
+        _combSolution.value = sol
+        if (logHistory && sol.isValid) {
+            viewModelScope.launch {
+                dao.insertCalculation(
+                    CalculationEntity(
+                        expression = "Combinatorics(n=$n, r=$r)",
+                        result = "nPr=${AdvancedSolvers.format(sol.nPr)}, nCr=${AdvancedSolvers.format(sol.nCr)}",
+                        angleMode = "COMB"
+                    )
+                )
+            }
+        }
+    }
+
     // --- Unit Converter State ---
     private val _selectedCategory = MutableStateFlow(UnitCategory.LENGTH)
     val selectedCategory: StateFlow<UnitCategory> = _selectedCategory.asStateFlow()
@@ -401,6 +599,134 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _conversionResult = MutableStateFlow<ConversionResult?>(null)
     val conversionResult: StateFlow<ConversionResult?> = _conversionResult.asStateFlow()
 
+    // --- Science Context Mode (Math / Physics / Chemistry) ---
+    private val _contextMode = MutableStateFlow(CalculatorContextMode.MATH)
+    val contextMode: StateFlow<CalculatorContextMode> = _contextMode.asStateFlow()
+
+    fun setContextMode(mode: CalculatorContextMode) {
+        _contextMode.value = mode
+    }
+
+    // Physics Mode State
+    val physicsSubTab = MutableStateFlow(0) // 0 = Constants & Calc, 1 = Physics Expressions
+    val physicsSearchQuery = MutableStateFlow("")
+    val physicsFormulaType = MutableStateFlow(ScienceSolvers.PhysicsFormulaType.CIRCULAR_MOTION)
+    val physVal1 = MutableStateFlow("1200")
+    val physVal2 = MutableStateFlow("20")
+    val physVal3 = MutableStateFlow("50")
+    val physVal4 = MutableStateFlow("4")
+    private val _physicsFormulaSolution = MutableStateFlow<ScienceSolvers.PhysicsFormulaSolution?>(null)
+    val physicsFormulaSolution: StateFlow<ScienceSolvers.PhysicsFormulaSolution?> = _physicsFormulaSolution.asStateFlow()
+
+    fun selectPhysicsFormula(type: ScienceSolvers.PhysicsFormulaType) {
+        physicsFormulaType.value = type
+        when (type) {
+            ScienceSolvers.PhysicsFormulaType.KINEMATICS -> {
+                physVal1.value = "0"; physVal2.value = "9.81"; physVal3.value = "5"
+            }
+            ScienceSolvers.PhysicsFormulaType.PROJECTILE -> {
+                physVal1.value = "30"; physVal2.value = "45"; physVal3.value = "9.80665"
+            }
+            ScienceSolvers.PhysicsFormulaType.FORCE_WORK -> {
+                physVal1.value = "10"; physVal2.value = "4.5"; physVal3.value = "12"; physVal4.value = "3"
+            }
+            ScienceSolvers.PhysicsFormulaType.CIRCULAR_MOTION -> {
+                physVal1.value = "1200"; physVal2.value = "20"; physVal3.value = "50"
+            }
+            ScienceSolvers.PhysicsFormulaType.MOMENTUM_IMPULSE -> {
+                physVal1.value = "1500"; physVal2.value = "25"; physVal3.value = "0"; physVal4.value = "0.25"
+            }
+            ScienceSolvers.PhysicsFormulaType.ENERGY -> {
+                physVal1.value = "2.5"; physVal2.value = "12"; physVal3.value = "10"
+            }
+            ScienceSolvers.PhysicsFormulaType.GRAVITATION -> {
+                physVal1.value = "5.972E24"; physVal2.value = "1000"; physVal3.value = "6.771E6"
+            }
+            ScienceSolvers.PhysicsFormulaType.OSCILLATIONS -> {
+                physVal1.value = "1.0"; physVal2.value = "250"; physVal3.value = "2.5"
+            }
+            ScienceSolvers.PhysicsFormulaType.FLUIDS_PRESSURE -> {
+                physVal1.value = "1000"; physVal2.value = "1.0"; physVal3.value = "0.5"; physVal4.value = "10"
+            }
+            ScienceSolvers.PhysicsFormulaType.OHMS_LAW -> {
+                physVal1.value = "12"; physVal2.value = "470"
+            }
+            ScienceSolvers.PhysicsFormulaType.ELECTROSTATICS -> {
+                physVal1.value = "2E-6"; physVal2.value = "-3E-6"; physVal3.value = "0.15"
+            }
+            ScienceSolvers.PhysicsFormulaType.PHOTON -> {
+                physVal1.value = "5.5E14"
+            }
+        }
+        solvePhysicsFormula()
+    }
+
+    fun solvePhysicsFormula() {
+        val v1 = physVal1.value.toDoubleOrNull() ?: 0.0
+        val v2 = physVal2.value.toDoubleOrNull() ?: 0.0
+        val v3 = physVal3.value.toDoubleOrNull() ?: 0.0
+        val v4 = physVal4.value.toDoubleOrNull() ?: 0.0
+        _physicsFormulaSolution.value = when (physicsFormulaType.value) {
+            ScienceSolvers.PhysicsFormulaType.KINEMATICS -> ScienceSolvers.solvePhysicsKinematics(v1, v2, v3)
+            ScienceSolvers.PhysicsFormulaType.PROJECTILE -> ScienceSolvers.solvePhysicsProjectile(v1, v2, v3)
+            ScienceSolvers.PhysicsFormulaType.FORCE_WORK -> ScienceSolvers.solvePhysicsForceWork(v1, v2, v3, v4)
+            ScienceSolvers.PhysicsFormulaType.CIRCULAR_MOTION -> ScienceSolvers.solvePhysicsCircularMotion(v1, v2, v3)
+            ScienceSolvers.PhysicsFormulaType.MOMENTUM_IMPULSE -> ScienceSolvers.solvePhysicsMomentumImpulse(v1, v2, v3, v4)
+            ScienceSolvers.PhysicsFormulaType.ENERGY -> ScienceSolvers.solvePhysicsEnergy(v1, v2, v3)
+            ScienceSolvers.PhysicsFormulaType.GRAVITATION -> ScienceSolvers.solvePhysicsGravitation(v1, v2, v3)
+            ScienceSolvers.PhysicsFormulaType.OSCILLATIONS -> ScienceSolvers.solvePhysicsOscillations(v1, v2, v3)
+            ScienceSolvers.PhysicsFormulaType.FLUIDS_PRESSURE -> ScienceSolvers.solvePhysicsFluidsPressure(v1, v2, v3, v4)
+            ScienceSolvers.PhysicsFormulaType.OHMS_LAW -> ScienceSolvers.solvePhysicsOhmsLaw(v1, v2)
+            ScienceSolvers.PhysicsFormulaType.ELECTROSTATICS -> ScienceSolvers.solvePhysicsElectrostatics(v1, v2, v3)
+            ScienceSolvers.PhysicsFormulaType.PHOTON -> ScienceSolvers.solvePhysicsPhoton(v1)
+        }
+    }
+
+    // Chemistry Mode State
+    val chemistrySubTab = MutableStateFlow(0) // 0 = pH / pOH, 1 = Gas & Dilution, 2 = Constants & Calc
+    val chemSearchQuery = MutableStateFlow("")
+    val phInputType = MutableStateFlow(ScienceSolvers.PhInputType.PH)
+    val phInputValue = MutableStateFlow("3.5")
+    private val _phSolution = MutableStateFlow<ScienceSolvers.PhSolution?>(null)
+    val phSolution: StateFlow<ScienceSolvers.PhSolution?> = _phSolution.asStateFlow()
+
+    fun solvePh() {
+        val v = phInputValue.value.toDoubleOrNull() ?: Double.NaN
+        _phSolution.value = ScienceSolvers.solvePhSystem(phInputType.value, v)
+    }
+
+    val gasTarget = MutableStateFlow(ScienceSolvers.GasSolveTarget.PRESSURE)
+    val gasP = MutableStateFlow("1.0")
+    val gasV = MutableStateFlow("22.414")
+    val gasN = MutableStateFlow("1.0")
+    val gasT = MutableStateFlow("273.15")
+    private val _gasSolution = MutableStateFlow<ScienceSolvers.IdealGasSolution?>(null)
+    val gasSolution: StateFlow<ScienceSolvers.IdealGasSolution?> = _gasSolution.asStateFlow()
+
+    fun solveIdealGas() {
+        val p = gasP.value.toDoubleOrNull() ?: 0.0
+        val v = gasV.value.toDoubleOrNull() ?: 0.0
+        val n = gasN.value.toDoubleOrNull() ?: 0.0
+        val t = gasT.value.toDoubleOrNull() ?: 0.0
+        _gasSolution.value = ScienceSolvers.solveIdealGas(gasTarget.value, p, v, n, t)
+    }
+
+    val dilutionTarget = MutableStateFlow(ScienceSolvers.DilutionTarget.V1)
+    val dilM1 = MutableStateFlow("6.0")
+    val dilV1 = MutableStateFlow("25")
+    val dilM2 = MutableStateFlow("0.5")
+    val dilV2 = MutableStateFlow("300")
+    private val _dilutionSolution = MutableStateFlow<ScienceSolvers.DilutionSolution?>(null)
+    val dilutionSolution: StateFlow<ScienceSolvers.DilutionSolution?> = _dilutionSolution.asStateFlow()
+
+    fun solveDilution() {
+        val m1 = dilM1.value.toDoubleOrNull() ?: 0.0
+        val v1 = dilV1.value.toDoubleOrNull() ?: 0.0
+        val m2 = dilM2.value.toDoubleOrNull() ?: 0.0
+        val v2 = dilV2.value.toDoubleOrNull() ?: 0.0
+        _dilutionSolution.value = ScienceSolvers.solveDilution(dilutionTarget.value, m1, v1, m2, v2)
+    }
+
     init {
         updateConversion()
         solveQuadratic()
@@ -408,6 +734,19 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         solveSummation()
         solveExponential()
         solveStatistics()
+        solveNumberTheory()
+        solveSequence()
+        solveCircle()
+        solveTrigAngle()
+        solveRightTriangle()
+        solveGeneralTriangle()
+        solveSolid3D()
+        solveLogarithm()
+        solveCombinatorics()
+        solvePhysicsFormula()
+        solvePh()
+        solveIdealGas()
+        solveDilution()
     }
 
     // Exponent/Power Mode (when active, typed numbers become superscripts: ⁰¹²³⁴⁵⁶⁷⁸⁹)
@@ -457,8 +796,29 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         computeLivePreview()
     }
 
+    fun onInsertConstant(valueStr: String) {
+        val curr = _expression.value
+        if (_calculationResult.value != null || curr.isEmpty()) {
+            _expression.value = valueStr
+            _calculationResult.value = null
+        } else {
+            val last = curr.last()
+            val needsMul = last.isDigit() || last == ')' || last == 'π' || last == 'e' || last == 'x' || last == 'y'
+            _expression.value = if (needsMul) "$curr×$valueStr" else "$curr$valueStr"
+        }
+        computeLivePreview()
+    }
+
+    fun useScienceValueInCalculator(valueStr: String) {
+        _expression.value = valueStr
+        _calculationResult.value = null
+        _contextMode.value = CalculatorContextMode.MATH
+        computeLivePreview()
+    }
+
     private fun isDigitOrConst(text: String): Boolean {
-        return text in listOf("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "π", "e", "x", "y")
+        return text in listOf("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "π", "e", "x", "y") ||
+            text.toDoubleOrNull() != null
     }
 
     private fun isOperator(text: String): Boolean {

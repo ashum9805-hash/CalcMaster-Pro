@@ -14,7 +14,7 @@ object MathEngine {
     fun formatNumber(value: Double): String {
         if (value.isNaN()) return "Undefined (NaN)"
         if (value.isInfinite()) return if (value > 0) "Infinity (∞)" else "-Infinity (-∞)"
-        if (abs(value) < 1.0E-12 && value != 0.0) return "0"
+        if (value == 0.0 || abs(value) < 1.0E-300) return "0"
         
         // If integer value
         if (value % 1.0 == 0.0 && abs(value) < 1.0E15) {
@@ -255,7 +255,7 @@ object MathEngine {
             }
 
             // Step 3: Exponents (a ^ b)
-            val powerRegex = Regex("""(-?\d+(?:\.\d+)?)\s*\^\s*(-?\d+(?:\.\d+)?)""")
+            val powerRegex = Regex("""(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*\^\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)""")
             while (powerRegex.containsMatchIn(currentExpr)) {
                 val match = powerRegex.find(currentExpr)!!
                 val base = match.groupValues[1].toDouble()
@@ -313,7 +313,7 @@ object MathEngine {
             }
 
             // Step 4: Multiplications, Divisions, Modulo (% / * / /)
-            val mulDivRegex = Regex("""(-?\d+(?:\.\d+)?)\s*([*/%])\s*(-?\d+(?:\.\d+)?)""")
+            val mulDivRegex = Regex("""(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*([*/%])\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)""")
             while (mulDivRegex.containsMatchIn(currentExpr)) {
                 val match = mulDivRegex.find(currentExpr)!!
                 val left = match.groupValues[1].toDouble()
@@ -353,7 +353,7 @@ object MathEngine {
             }
 
             // Step 5: Additions & Subtractions
-            val addSubRegex = Regex("""(-?\d+(?:\.\d+)?)\s*([+\-])\s*(\d+(?:\.\d+)?)""")
+            val addSubRegex = Regex("""(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*(?<![eE])([+\-])\s*(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)""")
             while (addSubRegex.containsMatchIn(currentExpr) && !isSingleNumber(currentExpr)) {
                 val match = addSubRegex.find(currentExpr)!!
                 val left = match.groupValues[1].toDouble()
@@ -521,16 +521,19 @@ object MathEngine {
         return when (fn.lowercase()) {
             "sin" -> {
                 val rad = if (angleMode == AngleMode.DEG) Math.toRadians(arg) else arg
-                sin(rad)
+                val v = sin(rad)
+                if (abs(v) < 1.0E-13) 0.0 else v
             }
             "cos" -> {
                 val rad = if (angleMode == AngleMode.DEG) Math.toRadians(arg) else arg
-                cos(rad)
+                val v = cos(rad)
+                if (abs(v) < 1.0E-13) 0.0 else v
             }
             "tan" -> {
                 val rad = if (angleMode == AngleMode.DEG) Math.toRadians(arg) else arg
-                if (abs(cos(rad)) < 1.0E-14) throw ArithmeticException("Tangent undefined at 90° / π/2")
-                tan(rad)
+                if (abs(cos(rad)) < 1.0E-13) throw ArithmeticException("Tangent undefined at 90° / π/2")
+                val v = tan(rad)
+                if (abs(v) < 1.0E-13) 0.0 else v
             }
             "asin" -> {
                 if (arg < -1.0 || arg > 1.0) throw ArithmeticException("Domain error: asin domain is [-1, 1]")
@@ -815,6 +818,18 @@ object MathEngine {
                 eat(')'.code)
             } else if ((ch in '0'.code..'9'.code) || ch == '.'.code) {
                 while ((ch in '0'.code..'9'.code) || ch == '.'.code) nextChar()
+                if (ch == 'e'.code || ch == 'E'.code) {
+                    val savedPos = pos
+                    val savedCh = ch
+                    nextChar()
+                    if (ch == '+'.code || ch == '-'.code) nextChar()
+                    if (ch in '0'.code..'9'.code) {
+                        while (ch in '0'.code..'9'.code) nextChar()
+                    } else {
+                        pos = savedPos
+                        ch = savedCh
+                    }
+                }
                 x = str.substring(startPos, pos).toDouble()
             } else if (ch in 'a'.code..'z'.code || ch in 'A'.code..'Z'.code) {
                 while (ch in 'a'.code..'z'.code || ch in 'A'.code..'Z'.code || ch in '0'.code..'9'.code) nextChar()

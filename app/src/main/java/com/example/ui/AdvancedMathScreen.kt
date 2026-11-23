@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalFocusManager
@@ -31,6 +33,11 @@ import com.example.math.AlternativeRepresentations
 import com.example.math.CalculationResult
 import com.example.ui.components.MathSlot
 import com.example.ui.components.QuickSlotChip
+import com.example.ui.solvers.TextbookCircleCard
+import com.example.ui.solvers.TextbookCombinatoricsCard
+import com.example.ui.solvers.TextbookLogarithmCard
+import com.example.ui.solvers.TextbookSolids3DCard
+import com.example.ui.solvers.TextbookTrigonometryCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +47,7 @@ fun AdvancedMathScreen(
     modifier: Modifier = Modifier
 ) {
     val activeTab by viewModel.advancedTab.collectAsState()
-    val tabScrollState = rememberScrollState()
+    var dropdownExpanded by remember { mutableStateOf(false) }
 
     var activeSolutionForModal by remember { mutableStateOf<CalculationResult?>(null) }
 
@@ -60,13 +67,13 @@ fun AdvancedMathScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Textbook Math Formulas",
+                    text = "Calculation Methods",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "Fill dedicated mathematical slots directly",
+                    text = "Select a calculation template from the menu",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -74,7 +81,7 @@ fun AdvancedMathScreen(
 
             IconButton(
                 onClick = onOpenHistory,
-                modifier = Modifier.size(36.dp).testTag("advanced_math_history_button")
+                modifier = Modifier.size(48.dp).testTag("advanced_math_history_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.History,
@@ -85,75 +92,104 @@ fun AdvancedMathScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-        // Tab Selector Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(tabScrollState)
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // Categorized Dropdown Selector (Replaces sideways scrolling chips)
+        ExposedDropdownMenuBox(
+            expanded = dropdownExpanded,
+            onExpandedChange = { dropdownExpanded = it },
+            modifier = Modifier.fillMaxWidth()
         ) {
-            FilterChip(
-                selected = activeTab == AdvancedMathTab.SUMMATION,
-                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.SUMMATION) },
-                label = { Text("Summation (Σ)") },
-                leadingIcon = { Icon(Icons.Default.Functions, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                modifier = Modifier.testTag("tab_summation")
+            OutlinedTextField(
+                value = activeTab.title,
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                label = { Text("${activeTab.category} • ${activeTab.subtitle}") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = iconForTab(activeTab),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded)
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                ),
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth()
+                    .testTag("dropdown_calculation_method")
             )
-            FilterChip(
-                selected = activeTab == AdvancedMathTab.NUMBER_THEORY,
-                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.NUMBER_THEORY) },
-                label = { Text("GCF & LCM") },
-                leadingIcon = { Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                modifier = Modifier.testTag("tab_number_theory")
-            )
-            FilterChip(
-                selected = activeTab == AdvancedMathTab.SEQUENCES,
-                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.SEQUENCES) },
-                label = { Text("Sequences (A.P. & G.P.)") },
-                leadingIcon = { Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                modifier = Modifier.testTag("tab_sequences")
-            )
-            FilterChip(
-                selected = activeTab == AdvancedMathTab.QUADRATIC,
-                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.QUADRATIC) },
-                label = { Text("Quadratic (ax²+bx+c)") },
-                leadingIcon = { Icon(Icons.Default.SquareFoot, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                modifier = Modifier.testTag("tab_quadratic")
-            )
-            FilterChip(
-                selected = activeTab == AdvancedMathTab.LINEAR_SYSTEM,
-                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.LINEAR_SYSTEM) },
-                label = { Text("2×2 Linear System") },
-                leadingIcon = { Icon(Icons.Default.GridOn, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                modifier = Modifier.testTag("tab_linear_system")
-            )
-            FilterChip(
-                selected = activeTab == AdvancedMathTab.EXPONENTIAL,
-                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.EXPONENTIAL) },
-                label = { Text("Exponential (bˣ = c)") },
-                leadingIcon = { Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                modifier = Modifier.testTag("tab_exponential")
-            )
-            FilterChip(
-                selected = activeTab == AdvancedMathTab.CALCULUS,
-                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.CALCULUS) },
-                label = { Text("Calculus (∫ & d/dx)") },
-                leadingIcon = { Icon(Icons.Default.Timeline, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                modifier = Modifier.testTag("tab_calculus")
-            )
-            FilterChip(
-                selected = activeTab == AdvancedMathTab.STATISTICS,
-                onClick = { viewModel.setAdvancedTab(AdvancedMathTab.STATISTICS) },
-                label = { Text("Statistics") },
-                leadingIcon = { Icon(Icons.Default.BarChart, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                modifier = Modifier.testTag("tab_statistics")
-            )
+
+            ExposedDropdownMenu(
+                expanded = dropdownExpanded,
+                onDismissRequest = { dropdownExpanded = false },
+                modifier = Modifier.heightIn(max = 440.dp)
+            ) {
+                val grouped = AdvancedMathTab.entries.groupBy { it.category }
+                grouped.entries.forEachIndexed { groupIndex, (categoryName, tabs) ->
+                    if (groupIndex > 0) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
+                    Text(
+                        text = categoryName.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    )
+                    tabs.forEach { tab ->
+                        val isSelected = tab == activeTab
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = tab.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = tab.subtitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = iconForTab(tab),
+                                    contentDescription = null,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            trailingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            } else null,
+                            onClick = {
+                                viewModel.setAdvancedTab(tab)
+                                dropdownExpanded = false
+                            },
+                            modifier = Modifier.testTag("menu_item_${tab.name.lowercase()}")
+                        )
+                    }
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Active Solver Content in Scrollable Column
         LazyColumn(
@@ -164,6 +200,24 @@ fun AdvancedMathScreen(
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             when (activeTab) {
+                AdvancedMathTab.CIRCLES -> item {
+                    TextbookCircleCard(
+                        viewModel = viewModel,
+                        onShowMore = { res -> activeSolutionForModal = res }
+                    )
+                }
+                AdvancedMathTab.TRIGONOMETRY -> item {
+                    TextbookTrigonometryCard(
+                        viewModel = viewModel,
+                        onShowMore = { res -> activeSolutionForModal = res }
+                    )
+                }
+                AdvancedMathTab.SOLIDS_3D -> item {
+                    TextbookSolids3DCard(
+                        viewModel = viewModel,
+                        onShowMore = { res -> activeSolutionForModal = res }
+                    )
+                }
                 AdvancedMathTab.SUMMATION -> item {
                     TextbookSummationCard(
                         viewModel = viewModel,
@@ -172,6 +226,12 @@ fun AdvancedMathScreen(
                 }
                 AdvancedMathTab.NUMBER_THEORY -> item {
                     TextbookNumberTheoryCard(
+                        viewModel = viewModel,
+                        onShowMore = { res -> activeSolutionForModal = res }
+                    )
+                }
+                AdvancedMathTab.COMBINATORICS -> item {
+                    TextbookCombinatoricsCard(
                         viewModel = viewModel,
                         onShowMore = { res -> activeSolutionForModal = res }
                     )
@@ -200,6 +260,12 @@ fun AdvancedMathScreen(
                         onShowMore = { res -> activeSolutionForModal = res }
                     )
                 }
+                AdvancedMathTab.LOGARITHM -> item {
+                    TextbookLogarithmCard(
+                        viewModel = viewModel,
+                        onShowMore = { res -> activeSolutionForModal = res }
+                    )
+                }
                 AdvancedMathTab.CALCULUS -> item {
                     TextbookCalculusCard(
                         viewModel = viewModel,
@@ -212,6 +278,12 @@ fun AdvancedMathScreen(
                         onShowMore = { res -> activeSolutionForModal = res }
                     )
                 }
+                AdvancedMathTab.PHYSICS_EXPRESSIONS -> item {
+                    PhysicsFormulaWorkstationBody(
+                        viewModel = viewModel,
+                        onShowSolution = { res -> activeSolutionForModal = res }
+                    )
+                }
             }
         }
     }
@@ -221,6 +293,25 @@ fun AdvancedMathScreen(
             result = activeSolutionForModal!!,
             onDismiss = { activeSolutionForModal = null }
         )
+    }
+}
+
+private fun iconForTab(tab: AdvancedMathTab): ImageVector {
+    return when (tab) {
+        AdvancedMathTab.SUMMATION -> Icons.Default.Functions
+        AdvancedMathTab.CIRCLES -> Icons.Default.RadioButtonUnchecked
+        AdvancedMathTab.TRIGONOMETRY -> Icons.Default.ChangeHistory
+        AdvancedMathTab.SOLIDS_3D -> Icons.Default.ViewInAr
+        AdvancedMathTab.QUADRATIC -> Icons.Default.SquareFoot
+        AdvancedMathTab.LINEAR_SYSTEM -> Icons.Default.GridOn
+        AdvancedMathTab.EXPONENTIAL -> Icons.Default.Bolt
+        AdvancedMathTab.LOGARITHM -> Icons.Default.Superscript
+        AdvancedMathTab.CALCULUS -> Icons.Default.Timeline
+        AdvancedMathTab.SEQUENCES -> Icons.Default.Repeat
+        AdvancedMathTab.NUMBER_THEORY -> Icons.Default.Category
+        AdvancedMathTab.COMBINATORICS -> Icons.Default.Shuffle
+        AdvancedMathTab.STATISTICS -> Icons.Default.BarChart
+        AdvancedMathTab.PHYSICS_EXPRESSIONS -> Icons.Default.Science
     }
 }
 

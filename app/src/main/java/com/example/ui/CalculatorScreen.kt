@@ -30,9 +30,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.ScrollState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.math.AngleMode
+import com.example.math.CalculationResult
 import com.example.math.MathEngine
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,8 +58,13 @@ fun CalculatorScreen(
     val xVal by viewModel.xVariable.collectAsState()
     val yVal by viewModel.yVariable.collectAsState()
 
+    val contextMode by viewModel.contextMode.collectAsState()
+    val physicsSubTab by viewModel.physicsSubTab.collectAsState()
+    val chemistrySubTab by viewModel.chemistrySubTab.collectAsState()
+
     var showEditVariableDialog by remember { mutableStateOf<String?>(null) } // "x" or "y"
     var tempVarInput by remember { mutableStateOf("") }
+    var scienceSolutionForModal by remember { mutableStateOf<com.example.math.CalculationResult?>(null) }
 
     val exprScrollState = rememberScrollState()
 
@@ -73,386 +80,426 @@ fun CalculatorScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Top Toolbar / Controls
+            // Top Mode Selector Bar (Math / Physics / Chemistry) + History & Settings Actions
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("calculator_mode_selector")
                 ) {
-                    // DEG / RAD Toggle Pill
-                    FilterChip(
-                        selected = angleMode == AngleMode.DEG,
-                        onClick = { viewModel.toggleAngleMode() },
-                        label = {
-                            Text(
-                                text = if (angleMode == AngleMode.DEG) "DEG" else "RAD",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier.testTag("angle_mode_toggle")
-                    )
-
-                    // 2nd Function Toggle
-                    FilterChip(
-                        selected = isInverse,
-                        onClick = { viewModel.toggleInverse() },
-                        label = {
-                            Text(
-                                text = "2nd",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        modifier = Modifier.testTag("inverse_function_toggle")
-                    )
-
-                    // Exponent/Power Mode Indicator (creates ² ³ ⁴ ... superscripts)
-                    FilterChip(
-                        selected = isPowerMode,
-                        onClick = { viewModel.togglePowerMode() },
-                        label = {
-                            Text(
-                                text = if (isPowerMode) "xʸ (ON)" else "xʸ",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                        ),
-                        modifier = Modifier.testTag("power_mode_toggle")
-                    )
-
-                    // Quick Jump to Advanced Solvers
-                    AssistChip(
-                        onClick = onOpenAdvancedMath,
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Functions,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        },
-                        label = {
-                            Text("Equations & Σ", style = MaterialTheme.typography.labelSmall)
-                        },
-                        modifier = Modifier.testTag("btn_quick_advanced_math")
-                    )
-
-                    if (hasMemory) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.tertiaryContainer
-                        ) {
-                            Text(
-                                text = "M",
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
+                    CalculatorContextMode.entries.forEachIndexed { index, mode ->
+                        val icon = when (mode) {
+                            CalculatorContextMode.MATH -> Icons.Default.Calculate
+                            CalculatorContextMode.PHYSICS -> Icons.Default.Bolt
+                            CalculatorContextMode.CHEMISTRY -> Icons.Default.Science
                         }
+                        SegmentedButton(
+                            selected = contextMode == mode,
+                            onClick = { viewModel.setContextMode(mode) },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = CalculatorContextMode.entries.size
+                            ),
+                            icon = {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = mode.label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1
+                                )
+                            },
+                            modifier = Modifier.testTag("mode_selector_${mode.name.lowercase()}")
+                        )
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (!isWideScreen) {
-                        IconButton(
-                            onClick = { viewModel.toggleScientificKeyboard() },
-                            modifier = Modifier.size(36.dp).testTag("toggle_scientific_button")
-                        ) {
-                            Icon(
-                                imageVector = if (isScientificExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Toggle scientific keypad",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
+                IconButton(
+                    onClick = onOpenHistory,
+                    modifier = Modifier.size(48.dp).testTag("calculator_history_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = "View calculation history",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-                    IconButton(
-                        onClick = onOpenHistory,
-                        modifier = Modifier.size(36.dp).testTag("calculator_history_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = "View calculation history",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier.size(36.dp).testTag("calculator_settings_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Open Settings & Themes",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                IconButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.size(48.dp).testTag("calculator_settings_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Open Settings & Themes",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 
-            // Display & Viewing Area (Reserved 35% to 48% of screen for inserting numbers & viewing results)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(if (isWideScreen) 0.40f else if (isScientificExpanded) 0.35f else 0.48f)
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.Bottom
-            ) {
-                // Expression display (Supports multi-line expressions without horizontal cramping or overlapping)
-                val lineCount = expression.count { it == '\n' } + 1
-                Text(
-                    text = if (expression.isEmpty()) "0" else expression,
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize = if (lineCount > 2) 18.sp else if (expression.length > 20) 20.sp else 26.sp,
-                        lineHeight = if (lineCount > 2) 24.sp else if (expression.length > 20) 26.sp else 32.sp
-                    ),
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Medium,
-                    color = if (expression.isEmpty()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.End,
-                    maxLines = 6,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(exprScrollState)
-                        .testTag("calculator_expression_display")
-                )
-
-                // Live Preview or Result
-                val displayResult = calculationResult?.formattedResult ?: livePreview
-                if (!displayResult.isNullOrEmpty()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = displayResult,
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontSize = if (displayResult.length > 14) 24.sp else 32.sp
-                        ),
-                        fontWeight = FontWeight.Bold,
-                        color = if (calculationResult?.isSuccess == false) {
-                            MaterialTheme.colorScheme.error
-                        } else if (calculationResult != null) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.outline
-                        },
-                        fontFamily = FontFamily.Monospace,
-                        textAlign = TextAlign.End,
-                        maxLines = 1,
+            when (contextMode) {
+                CalculatorContextMode.MATH -> {
+                    // Math Context Toolbar
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { viewModel.commitResult() }
-                            .testTag("calculator_result_display")
-                    )
-                } else {
-                    Spacer(modifier = Modifier.height(6.dp))
-                }
-
-                // Row with Variables and "More" button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Variable value chips: [ x = 2 ] [ y = 3 ]
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    showEditVariableDialog = "x"
-                                    tempVarInput = MathEngine.formatNumber(xVal)
-                                }
+                            .padding(horizontal = 14.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "x = ${MathEngine.formatNumber(xVal)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit x",
-                                    modifier = Modifier.size(11.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                            FilterChip(
+                                selected = angleMode == AngleMode.DEG,
+                                onClick = { viewModel.toggleAngleMode() },
+                                label = {
+                                    Text(
+                                        text = if (angleMode == AngleMode.DEG) "DEG" else "RAD",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                modifier = Modifier.testTag("angle_mode_toggle")
+                            )
+
+                            FilterChip(
+                                selected = isInverse,
+                                onClick = { viewModel.toggleInverse() },
+                                label = {
+                                    Text(
+                                        text = "2nd",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                modifier = Modifier.testTag("inverse_function_toggle")
+                            )
+
+                            FilterChip(
+                                selected = isPowerMode,
+                                onClick = { viewModel.togglePowerMode() },
+                                label = {
+                                    Text(
+                                        text = if (isPowerMode) "xʸ (ON)" else "xʸ",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                ),
+                                modifier = Modifier.testTag("power_mode_toggle")
+                            )
+
+                            AssistChip(
+                                onClick = onOpenAdvancedMath,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Functions,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                },
+                                label = {
+                                    Text("Methods", style = MaterialTheme.typography.labelSmall)
+                                },
+                                modifier = Modifier.testTag("btn_quick_advanced_math")
+                            )
+
+                            if (hasMemory) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.tertiaryContainer
+                                ) {
+                                    Text(
+                                        text = "M",
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                }
                             }
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    showEditVariableDialog = "y"
-                                    tempVarInput = MathEngine.formatNumber(yVal)
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                        if (!isWideScreen) {
+                            IconButton(
+                                onClick = { viewModel.toggleScientificKeyboard() },
+                                modifier = Modifier.size(36.dp).testTag("toggle_scientific_button")
                             ) {
-                                Text(
-                                    text = "y = ${MathEngine.formatNumber(yVal)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.secondary
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
                                 Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit y",
-                                    modifier = Modifier.size(11.dp),
-                                    tint = MaterialTheme.colorScheme.secondary
-                                )
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { viewModel.onIndent() }
-                                .testTag("chip_indent")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "⇥ Indent",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    imageVector = if (isScientificExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                    contentDescription = "Toggle scientific keypad",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
                     }
 
-                    // "More" Button for step-by-step breakdown - Automatically visible when expression has a result!
-                    val isFinished = calculationResult != null || livePreview != null
-                    AnimatedVisibility(
-                        visible = isFinished,
-                        enter = fadeIn(),
-                        exit = fadeOut()
+                    // Display & Viewing Area
+                    CalculatorDisplayArea(
+                        expression = expression,
+                        livePreview = livePreview,
+                        calculationResult = calculationResult,
+                        xVal = xVal,
+                        yVal = yVal,
+                        exprScrollState = exprScrollState,
+                        showVariables = true,
+                        onEditVariable = { varName, value ->
+                            showEditVariableDialog = varName
+                            tempVarInput = value
+                        },
+                        onIndent = { viewModel.onIndent() },
+                        onInsertSciE = { viewModel.onAppend("E") },
+                        onCommitResult = { viewModel.commitResult() },
+                        onShowMore = {
+                            if (calculationResult == null && livePreview != null) {
+                                viewModel.onEvaluate()
+                            }
+                            viewModel.openSolutionSheet()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(if (isWideScreen) 0.36f else if (isScientificExpanded) 0.31f else 0.44f)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Keypad Section
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(if (isWideScreen) 0.64f else if (isScientificExpanded) 0.69f else 0.56f),
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                        tonalElevation = 2.dp
                     ) {
-                        Button(
-                            onClick = {
+                        if (isWideScreen) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                ScientificKeypad(
+                                    viewModel = viewModel,
+                                    isInverse = isInverse,
+                                    isPowerMode = isPowerMode,
+                                    modifier = Modifier.weight(1.1f)
+                                )
+                                MainKeypad(
+                                    viewModel = viewModel,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (isScientificExpanded) {
+                                    ScientificKeypadCompact(
+                                        viewModel = viewModel,
+                                        isInverse = isInverse,
+                                        isPowerMode = isPowerMode,
+                                        modifier = Modifier.weight(0.33f)
+                                    )
+                                }
+                                MainKeypad(
+                                    viewModel = viewModel,
+                                    modifier = Modifier.weight(if (isScientificExpanded) 0.67f else 1f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                CalculatorContextMode.PHYSICS -> {
+                    // Physics Sub-Context Bar (Constants & Calc vs Formula Solvers)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = physicsSubTab == 0,
+                            onClick = { viewModel.physicsSubTab.value = 0 },
+                            leadingIcon = { Icon(Icons.Default.Functions, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            label = { Text("Constants & Calc") },
+                            modifier = Modifier.weight(1f).testTag("chip_physics_constants")
+                        )
+                        FilterChip(
+                            selected = physicsSubTab == 1,
+                            onClick = { viewModel.physicsSubTab.value = 1 },
+                            leadingIcon = { Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            label = { Text("Physics Expressions") },
+                            modifier = Modifier.weight(1f).testTag("chip_physics_formulas")
+                        )
+                    }
+
+                    if (physicsSubTab == 0) {
+                        CalculatorDisplayArea(
+                            expression = expression,
+                            livePreview = livePreview,
+                            calculationResult = calculationResult,
+                            xVal = xVal,
+                            yVal = yVal,
+                            exprScrollState = exprScrollState,
+                            showVariables = false,
+                            onEditVariable = { _, _ -> },
+                            onIndent = { viewModel.onIndent() },
+                            onInsertSciE = { viewModel.onAppend("E") },
+                            onCommitResult = { viewModel.commitResult() },
+                            onShowMore = {
                                 if (calculationResult == null && livePreview != null) {
                                     viewModel.onEvaluate()
                                 }
                                 viewModel.openSolutionSheet()
                             },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            shape = RoundedCornerShape(16.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
-                            modifier = Modifier.height(34.dp).testTag("more_solution_button")
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(0.24f)
+                        )
+
+                        PhysicsConstantsDeck(viewModel = viewModel)
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(0.50f),
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                            tonalElevation = 2.dp
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.MenuBook,
-                                contentDescription = "View step-by-step breakdown and notes",
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "More",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelMedium
+                            MainKeypad(
+                                viewModel = viewModel,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
                             )
                         }
+                    } else {
+                        PhysicsFormulaWorkstation(
+                            viewModel = viewModel,
+                            onShowSolution = { scienceSolutionForModal = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        )
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Keypad Section (Lowered and sized proportionally to avoid cramping display space)
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(if (isWideScreen) 0.60f else if (isScientificExpanded) 0.65f else 0.52f),
-                color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                tonalElevation = 2.dp
-            ) {
-                if (isWideScreen) {
+                CalculatorContextMode.CHEMISTRY -> {
+                    // Chemistry Sub-Context Bar (pH/pOH, Gas & Dilution, Constants & Calc)
                     Row(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        ScientificKeypad(
-                            viewModel = viewModel,
-                            isInverse = isInverse,
-                            isPowerMode = isPowerMode,
-                            modifier = Modifier.weight(1.1f)
+                        FilterChip(
+                            selected = chemistrySubTab == 0,
+                            onClick = { viewModel.chemistrySubTab.value = 0 },
+                            label = { Text("pH / pOH", maxLines = 1) },
+                            modifier = Modifier.weight(1f).testTag("chip_chem_ph")
                         )
-                        MainKeypad(
-                            viewModel = viewModel,
-                            modifier = Modifier.weight(1f)
+                        FilterChip(
+                            selected = chemistrySubTab == 1,
+                            onClick = { viewModel.chemistrySubTab.value = 1 },
+                            label = { Text("Gas & Dilute", maxLines = 1) },
+                            modifier = Modifier.weight(1.1f).testTag("chip_chem_gas")
+                        )
+                        FilterChip(
+                            selected = chemistrySubTab == 2,
+                            onClick = { viewModel.chemistrySubTab.value = 2 },
+                            label = { Text("Constants", maxLines = 1) },
+                            modifier = Modifier.weight(1f).testTag("chip_chem_constants")
                         )
                     }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        if (isScientificExpanded) {
-                            ScientificKeypadCompact(
-                                viewModel = viewModel,
-                                isInverse = isInverse,
-                                isPowerMode = isPowerMode,
-                                modifier = Modifier.weight(0.33f)
-                            )
-                        }
-                        MainKeypad(
+
+                    when (chemistrySubTab) {
+                        0 -> ChemistryPhWorkstation(
                             viewModel = viewModel,
-                            modifier = Modifier.weight(if (isScientificExpanded) 0.67f else 1f)
+                            onShowSolution = { scienceSolutionForModal = it },
+                            modifier = Modifier.fillMaxWidth().weight(1f)
                         )
+                        1 -> ChemistryGasAndDilutionWorkstation(
+                            viewModel = viewModel,
+                            onShowSolution = { scienceSolutionForModal = it },
+                            modifier = Modifier.fillMaxWidth().weight(1f)
+                        )
+                        else -> {
+                            CalculatorDisplayArea(
+                                expression = expression,
+                                livePreview = livePreview,
+                                calculationResult = calculationResult,
+                                xVal = xVal,
+                                yVal = yVal,
+                                exprScrollState = exprScrollState,
+                                showVariables = false,
+                                onEditVariable = { _, _ -> },
+                                onIndent = { viewModel.onIndent() },
+                                onInsertSciE = { viewModel.onAppend("E") },
+                                onCommitResult = { viewModel.commitResult() },
+                                onShowMore = {
+                                    if (calculationResult == null && livePreview != null) {
+                                        viewModel.onEvaluate()
+                                    }
+                                    viewModel.openSolutionSheet()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(0.24f)
+                            )
+
+                            ChemistryConstantsDeck(viewModel = viewModel)
+
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(0.50f),
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                                tonalElevation = 2.dp
+                            ) {
+                                MainKeypad(
+                                    viewModel = viewModel,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -509,6 +556,222 @@ fun CalculatorScreen(
                 result = calculationResult!!,
                 onDismiss = { viewModel.closeSolutionSheet() }
             )
+        }
+
+        if (scienceSolutionForModal != null) {
+            SolutionDetailSheet(
+                result = scienceSolutionForModal!!,
+                onDismiss = { scienceSolutionForModal = null }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalculatorDisplayArea(
+    expression: String,
+    livePreview: String?,
+    calculationResult: CalculationResult?,
+    xVal: Double,
+    yVal: Double,
+    exprScrollState: ScrollState,
+    showVariables: Boolean,
+    onEditVariable: (String, String) -> Unit,
+    onIndent: () -> Unit,
+    onInsertSciE: () -> Unit,
+    onCommitResult: () -> Unit,
+    onShowMore: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.Bottom
+    ) {
+        val lineCount = expression.count { it == '\n' } + 1
+        Text(
+            text = if (expression.isEmpty()) "0" else expression,
+            style = MaterialTheme.typography.headlineSmall.copy(
+                fontSize = if (lineCount > 2) 18.sp else if (expression.length > 20) 20.sp else 26.sp,
+                lineHeight = if (lineCount > 2) 24.sp else if (expression.length > 20) 26.sp else 32.sp
+            ),
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Medium,
+            color = if (expression.isEmpty()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.End,
+            maxLines = 6,
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(exprScrollState)
+                .testTag("calculator_expression_display")
+        )
+
+        val displayResult = calculationResult?.formattedResult ?: livePreview
+        if (!displayResult.isNullOrEmpty()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = displayResult,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = if (displayResult.length > 14) 24.sp else 32.sp
+                ),
+                fontWeight = FontWeight.Bold,
+                color = if (calculationResult?.isSuccess == false) {
+                    MaterialTheme.colorScheme.error
+                } else if (calculationResult != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outline
+                },
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onCommitResult() }
+                    .testTag("calculator_result_display")
+            )
+        } else {
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (showVariables) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onEditVariable("x", MathEngine.formatNumber(xVal)) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "x = ${MathEngine.formatNumber(xVal)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit x",
+                                modifier = Modifier.size(11.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onEditVariable("y", MathEngine.formatNumber(yVal)) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "y = ${MathEngine.formatNumber(yVal)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit y",
+                                modifier = Modifier.size(11.dp),
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onIndent() }
+                            .testTag("chip_indent")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⇥ Indent",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onInsertSciE() }
+                            .testTag("chip_sci_e")
+                    ) {
+                        Text(
+                            text = "×10ⁿ (E)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+
+            val isFinished = calculationResult != null || livePreview != null
+            AnimatedVisibility(
+                visible = isFinished,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Button(
+                    onClick = onShowMore,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.height(34.dp).testTag("more_solution_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MenuBook,
+                        contentDescription = "View step-by-step breakdown and notes",
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "More",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
         }
     }
 }

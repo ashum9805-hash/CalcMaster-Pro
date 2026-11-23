@@ -36,20 +36,65 @@ fun FormulasScreen(
 ) {
     val categories = listOf(
         FormulaCategory(
+            title = "Circles, Arcs & Sectors",
+            items = listOf(
+                FormulaItem("Circumference & Diameter", "C = 2πr = πd", "Distance around a circle of radius r and diameter d = 2r."),
+                FormulaItem("Area of a Circle", "A = πr²", "Total enclosed area inside a circle of radius r."),
+                FormulaItem("Arc Length & Sector Area", "s = rθ,  A_sec = ½r²θ", "Central angle θ measured in radians (θ_rad = θ° × π/180)."),
+                FormulaItem("Chord Length", "c = 2r·sin(θ / 2)", "Straight-line distance connecting the endpoints of a circular arc."),
+                FormulaItem("Circle Cartesian Equation", "(x - h)² + (y - k)² = r²", "Circle centered at (h, k) with radius r; centered at origin: x² + y² = r².")
+            )
+        ),
+        FormulaCategory(
+            title = "Trigonometric Identities & Triangles",
+            items = listOf(
+                FormulaItem("SOH - CAH - TOA", "sin = O/H, cos = A/H, tan = O/A", "Right triangle trigonometric ratios relative to an acute angle."),
+                FormulaItem("Pythagorean Theorem & Identity", "a² + b² = c²,  sin²(θ) + cos²(θ) = 1", "Relates legs and hypotenuse of right triangles, and sine/cosine on the unit circle."),
+                FormulaItem("Law of Sines", "a / sin(A) = b / sin(B) = c / sin(C)", "Relates side lengths to sines of opposite angles in any triangle."),
+                FormulaItem("Law of Cosines", "c² = a² + b² - 2ab·cos(C)", "Generalizes the Pythagorean theorem to any SSS or SAS triangle."),
+                FormulaItem("Tangent & Reciprocals", "tan = sin/cos, csc = 1/sin, sec = 1/cos, cot = 1/tan", "All six fundamental trigonometric functions."),
+                FormulaItem("Double Angle Formulas", "sin(2θ) = 2sin(θ)cos(θ), cos(2θ) = cos²(θ) - sin²(θ)", "Useful for simplifying trigonometric expressions."),
+                FormulaItem("Degree to Radian", "rad = deg × (π / 180°)", "360° corresponds to 2π radians. 1 radian ≈ 57.2958°.")
+            )
+        ),
+        FormulaCategory(
+            title = "3D Solids Geometry",
+            items = listOf(
+                FormulaItem("Sphere", "V = (4/3)πr³,  A = 4πr²", "Volume and surface area of a sphere with radius r."),
+                FormulaItem("Right Circular Cylinder", "V = πr²h,  A = 2πr(r + h)", "Volume and total surface area of a cylinder with radius r and height h."),
+                FormulaItem("Right Circular Cone", "V = ⅓πr²h,  A = πr(r + √(r²+h²))", "Cone volume is one-third of the enclosing cylinder.")
+            )
+        ),
+        FormulaCategory(
+            title = "Physics Laws & Physical Quantities",
+            items = listOf(
+                FormulaItem("Uniform Circular Motion", "a_c = v²/r = ω²r,  F_c = mv²/r,  T = 2πr/v", "Centripetal acceleration & force always point radially inward; angular velocity ω = v/r."),
+                FormulaItem("Newton's 2nd Law, Work & Power", "F = ma,  W_earth = mg,  W = Fd,  P = W/t", "1 Newton = 1 kg·m/s², 1 Joule = 1 N·m, 1 Watt = 1 J/s."),
+                FormulaItem("Momentum & Impulse", "p = mv,  J = Δp = m(v - u) = F_avg·Δt", "Impulse equals change in linear momentum; conserved in closed collisions."),
+                FormulaItem("Kinematics (Uniform Accel)", "v = u + at,  s = ut + ½at²,  v² = u² + 2as", "Relates initial velocity u, final velocity v, acceleration a, time t, and displacement s."),
+                FormulaItem("Projectile Motion", "R = v₀²sin(2θ)/g,  H_max = (v₀sinθ)²/(2g)", "Parabolic flight under uniform gravity; horizontal speed v₀cosθ stays constant."),
+                FormulaItem("Mechanical Energy", "E_k = ½mv²,  E_p = mgh,  E_tot = E_k + E_p", "Total mechanical energy is conserved without non-conservative work."),
+                FormulaItem("Universal Gravitation & Orbits", "F_g = GM₁M₂/r²,  v_esc = √(2GM/r),  v_orb = √(GM/r)", "Newtonian gravity with G = 6.6743×10⁻¹¹ m³/(kg·s²)."),
+                FormulaItem("Oscillations (SHM)", "T_pend = 2π√(L/g),  T_spring = 2π√(m/k)", "Period & frequency f = 1/T of simple pendulums and Hookean springs."),
+                FormulaItem("Density & Fluid Pressure", "ρ = m/V,  P = F/A,  P_h = ρgh", "Pascal's hydrostatic pressure increases linearly with depth h."),
+                FormulaItem("Ohm's Law & DC Power", "V = I·R,  P = V·I = I²R", "Relates voltage (V), current (A), resistance (Ω), and power (W)."),
+                FormulaItem("Coulomb's Law (Electrostatics)", "F_e = k_e·q₁q₂/r²,  E = k_e·q₁/r²", "Electrostatic force and field with k_e ≈ 8.988×10⁹ N·m²/C²."),
+                FormulaItem("Planck-Einstein & Wave", "E = h·f = hc / λ,  p_photon = h / λ", "Photon energy with h = 6.626×10⁻³⁴ J·s and c = 2.998×10⁸ m/s.")
+            )
+        ),
+        FormulaCategory(
+            title = "Chemistry Equilibrium & Gas Laws",
+            items = listOf(
+                FormulaItem("pH & pOH Scale (25°C)", "pH = -log₁₀[H⁺],  pH + pOH = 14", "Water ion product K_w = [H⁺][OH⁻] = 1.0 × 10⁻¹⁴ M²."),
+                FormulaItem("Ideal Gas Law", "PV = nRT", "Universal gas constant R = 0.08206 L·atm/(mol·K) = 8.3145 J/(mol·K)."),
+                FormulaItem("Solution Dilution", "M₁V₁ = M₂V₂", "Conservation of solute moles during solvent dilution.")
+            )
+        ),
+        FormulaCategory(
             title = "Order of Operations & Hierarchy",
             items = listOf(
                 FormulaItem("PEMDAS / BODMAS", "P → E → MD → AS", "Parentheses / Brackets, Exponents & Roots, Multiplication & Division (left to right), Addition & Subtraction (left to right)."),
                 FormulaItem("Negative Signs", "-(a) = (-1) × a", "Unary minus has high precedence when attached directly to numbers, but in -3^2, exponentiation is evaluated first: -(3^2) = -9.")
-            )
-        ),
-        FormulaCategory(
-            title = "Trigonometric Identities",
-            items = listOf(
-                FormulaItem("Pythagorean Identity", "sin²(θ) + cos²(θ) = 1", "Fundamental relationship between sine and cosine for any angle θ."),
-                FormulaItem("Tangent Definition", "tan(θ) = sin(θ) / cos(θ)", "Valid where cos(θ) ≠ 0 (undefined at 90°, 270°, etc.)."),
-                FormulaItem("Double Angle (Sine)", "sin(2θ) = 2 sin(θ) cos(θ)", "Expresses sine of double angle in terms of single angle."),
-                FormulaItem("Double Angle (Cosine)", "cos(2θ) = cos²(θ) - sin²(θ)", "Equivalent to 2cos²(θ) - 1 or 1 - 2sin²(θ)."),
-                FormulaItem("Degree to Radian", "rad = deg × (π / 180°)", "360° corresponds to 2π radians. 1 radian ≈ 57.2958°.")
             )
         ),
         FormulaCategory(
