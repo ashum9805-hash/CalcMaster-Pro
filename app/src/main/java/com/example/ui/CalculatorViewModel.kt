@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.example.ui.theme.AccentPalette
 import com.example.ui.theme.ThemeMode
 
@@ -135,6 +137,15 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     // --- Calculator State ---
     private val _expression = MutableStateFlow("")
     val expression: StateFlow<String> = _expression.asStateFlow()
+
+    private val _expressionField = MutableStateFlow(TextFieldValue(""))
+    val expressionField: StateFlow<TextFieldValue> = _expressionField.asStateFlow()
+
+    private fun setExpressionWithCursor(newText: String, cursorIndex: Int = newText.length) {
+        val clamped = cursorIndex.coerceIn(0, newText.length)
+        _expression.value = newText
+        _expressionField.value = TextFieldValue(text = newText, selection = TextRange(clamped))
+    }
 
     private val _livePreview = MutableStateFlow<String?>(null)
     val livePreview: StateFlow<String?> = _livePreview.asStateFlow()
@@ -759,8 +770,34 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     // --- Calculator Actions ---
 
+    fun onExpressionFieldChange(newValue: TextFieldValue) {
+        val prevText = _expressionField.value.text
+        _expressionField.value = newValue
+        if (newValue.text != prevText) {
+            _expression.value = newValue.text
+            _calculationResult.value = null
+            computeLivePreview()
+        }
+    }
+
+    fun moveCursorLeft() {
+        val field = _expressionField.value
+        val pos = (field.selection.min - 1).coerceIn(0, field.text.length)
+        _expressionField.value = field.copy(selection = TextRange(pos))
+    }
+
+    fun moveCursorRight() {
+        val field = _expressionField.value
+        val pos = (field.selection.max + 1).coerceIn(0, field.text.length)
+        _expressionField.value = field.copy(selection = TextRange(pos))
+    }
+
     fun onAppend(text: String) {
-        val curr = _expression.value
+        val field = _expressionField.value
+        val curr = field.text
+        val selStart = field.selection.min.coerceIn(0, curr.length)
+        val selEnd = field.selection.max.coerceIn(0, curr.length)
+        val isEditingMiddle = selStart < curr.length || selStart != selEnd
 
         val digitToSup = mapOf(
             "0" to "⁰", "1" to "¹", "2" to "²", "3" to "³", "4" to "⁴",
@@ -772,45 +809,161 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         if (_isPowerMode.value) {
             if (digitToSup.containsKey(text)) {
                 toAppend = digitToSup[text] ?: text
-            } else if (text in listOf("×", "÷", "−", "+", "=", "%", "(", ")")) {
+            } else if (text in listOf("×", "÷", "/", "−", "+", "=", "%", "(", ")")) {
                 // Exit power mode upon typing a standard operator
                 _isPowerMode.value = false
             }
         }
 
-        // If we just evaluated an expression and user taps a number, start fresh
-        if (_calculationResult.value != null && isDigitOrConst(text)) {
-            _expression.value = toAppend
+        // If we just evaluated an expression and user is at end and taps a digit/const, start fresh
+        if (_calculationResult.value != null && !isEditingMiddle && isDigitOrConst(text)) {
+            setExpressionWithCursor(toAppend, toAppend.length)
             _calculationResult.value = null
-        } else if (_calculationResult.value != null && isOperator(text)) {
+        } else if (_calculationResult.value != null && !isEditingMiddle && isOperator(text)) {
             val res = _calculationResult.value?.formattedResult ?: ""
             if (!res.startsWith("Error")) {
-                _expression.value = res + toAppend
+                val next = res + toAppend
+                setExpressionWithCursor(next, next.length)
             } else {
-                _expression.value = toAppend
+                setExpressionWithCursor(toAppend, toAppend.length)
             }
             _calculationResult.value = null
         } else {
-            _expression.value = curr + toAppend
+            val next = curr.substring(0, selStart) + toAppend + curr.substring(selEnd)
+            setExpressionWithCursor(next, selStart + toAppend.length)
+            if (_calculationResult.value != null) {
+                _calculationResult.value = null
+            }
         }
         computeLivePreview()
     }
 
+    fun onInsertFraction() {
+        val field = _expressionField.value
+        val curr = field.text
+        val selStart = field.selection.min.coerceIn(0, curr.length)
+        val selEnd = field.selection.max.coerceIn(0, curr.length)
+
+        // Case 1: Selected text becomes numerator: (selected)/(|)
+        if (selStart != selEnd) {
+            val selected = curr.substring(selStart, selEnd)
+            val alreadyWrapped = selected.startsWith("(") && selected.endsWith(")")
+            val numPart = if (alreadyWrapped) selected else "($selected)"
+            val next = curr.substring(0, selStart) + "$numPart/()" + curr.substring(selEnd)
+            setExpressionWithCursor(next, selStart + numPart.length + 2)
+            _calculationResult.value = null
+            computeLivePreview()
+            return
+        }
+
+        // Case 2: Just evaluated at end -> wrap previous answer as numerator
+        if (_calculationResult.value != null && selStart == curr.length) {
+            val res = _calculationResult.value?.formattedResult ?: ""
+            if (!res.startsWith("Error") && res.isNotEmpty()) {
+                val cleanRes = res.removePrefix("=").trim()
+                val next = "($cleanRes)/()"
+                setExpressionWithCursor(next, next.length - 1)
+                _calculationResult.value = null
+                computeLivePreview()
+                return
+            }
+        }
+
+        val before = curr.substring(0, selStart)
+        val after = curr.substring(selStart)
+
+        // Case 3: Preceded by an operand or (...) -> wrap it as numerator and jump cursor into denominator ()
+        val tokenStart = findPrecedingOperandStart(before)
+        if (tokenStart != null && tokenStart < before.length) {
+            val prefix = before.substring(0, tokenStart)
+            val operand = before.substring(tokenStart)
+            val alreadyWrapped = operand.startsWith("(") && operand.endsWith(")")
+            val numPart = if (alreadyWrapped) operand else "($operand)"
+            val next = "$prefix$numPart/()$after"
+            setExpressionWithCursor(next, prefix.length + numPart.length + 2)
+        } else {
+            // Case 4: Empty or after operator -> insert (|)/() with cursor in numerator
+            val next = "$before()/()$after"
+            setExpressionWithCursor(next, selStart + 1)
+        }
+        _calculationResult.value = null
+        computeLivePreview()
+    }
+
+    private fun findPrecedingOperandStart(before: String): Int? {
+        if (before.isEmpty()) return null
+        val last = before.last()
+        val delimiters = setOf('+', '−', '-', '×', '*', '÷', '/', '(', '=', ',', '\n', ' ', '%')
+        if (last in delimiters) return null
+
+        // If preceded by a closing parenthesis, walk back to its matching '(' (and any function name prefix)
+        if (last == ')') {
+            var depth = 0
+            var idx = before.length - 1
+            while (idx >= 0) {
+                when (before[idx]) {
+                    ')' -> depth++
+                    '(' -> {
+                        depth--
+                        if (depth == 0) {
+                            var fnStart = idx
+                            while (fnStart > 0 && (before[fnStart - 1].isLetter() || before[fnStart - 1] in listOf('√', '∛'))) {
+                                fnStart--
+                            }
+                            return fnStart
+                        }
+                    }
+                }
+                idx--
+            }
+            return null
+        }
+
+        // Otherwise walk back over contiguous number / variable / superscript / scientific-notation chars
+        var idx = before.length - 1
+        while (idx >= 0) {
+            val c = before[idx]
+            val isOperandChar = c.isDigit() || c == '.' || c in listOf('π', 'e', 'E', 'x', 'y', 'X', 'Y', '⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹', '⁺', '⁻', 'ˣ', 'ʸ', 'ⁿ')
+            if (isOperandChar) {
+                idx--
+            } else if ((c == '-' || c == '+') && idx > 0 && (before[idx - 1] == 'E' || before[idx - 1] == 'e')) {
+                // Keep sign inside scientific notation like 1.5E-3
+                idx--
+            } else {
+                break
+            }
+        }
+        val start = idx + 1
+        return if (start < before.length) start else null
+    }
+
     fun onInsertConstant(valueStr: String) {
-        val curr = _expression.value
-        if (_calculationResult.value != null || curr.isEmpty()) {
-            _expression.value = valueStr
+        val field = _expressionField.value
+        val curr = field.text
+        val selStart = field.selection.min.coerceIn(0, curr.length)
+        val selEnd = field.selection.max.coerceIn(0, curr.length)
+
+        if (_calculationResult.value != null && selStart == curr.length && selStart == selEnd) {
+            setExpressionWithCursor(valueStr, valueStr.length)
+            _calculationResult.value = null
+        } else if (curr.isEmpty()) {
+            setExpressionWithCursor(valueStr, valueStr.length)
             _calculationResult.value = null
         } else {
-            val last = curr.last()
-            val needsMul = last.isDigit() || last == ')' || last == 'π' || last == 'e' || last == 'x' || last == 'y'
-            _expression.value = if (needsMul) "$curr×$valueStr" else "$curr$valueStr"
+            val before = curr.substring(0, selStart)
+            val after = curr.substring(selEnd)
+            val last = before.lastOrNull()
+            val needsMul = last != null && (last.isDigit() || last == ')' || last == 'π' || last == 'e' || last == 'x' || last == 'y')
+            val insertStr = if (needsMul) "×$valueStr" else valueStr
+            val next = "$before$insertStr$after"
+            setExpressionWithCursor(next, selStart + insertStr.length)
+            _calculationResult.value = null
         }
         computeLivePreview()
     }
 
     fun useScienceValueInCalculator(valueStr: String) {
-        _expression.value = valueStr
+        setExpressionWithCursor(valueStr, valueStr.length)
         _calculationResult.value = null
         _contextMode.value = CalculatorContextMode.MATH
         computeLivePreview()
@@ -822,64 +975,92 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun isOperator(text: String): Boolean {
-        return text in listOf("+", "−", "×", "÷", "%", "^")
+        return text in listOf("+", "−", "×", "÷", "/", "%", "^")
     }
 
     fun onClear() {
-        _expression.value = ""
+        setExpressionWithCursor("", 0)
         _livePreview.value = null
         _calculationResult.value = null
         _isPowerMode.value = false
     }
 
     fun onDelete() {
-        val curr = _expression.value
-        if (curr.isNotEmpty()) {
-            if (curr.endsWith("    ")) {
-                _expression.value = curr.dropLast(4)
-            } else if (curr.endsWith("  ")) {
-                _expression.value = curr.dropLast(2)
-            } else if (curr.endsWith("\n")) {
-                _expression.value = curr.dropLast(1)
-            } else {
-                val fns = listOf(
-                    " = ", "= ", "=", "asin(", "acos(", "atan(", "sinh(", "cosh(", "tanh(",
-                    "sin(", "cos(", "tan(", "sqrt(", "cbrt(", "log2(", "log(", "ln(", "abs(",
-                    "nCr(", "nPr(", "gcd(", "lcm(", "√(", "∛("
-                )
-                var matchedFn = false
-                for (fn in fns) {
-                    if (curr.endsWith(fn)) {
-                        _expression.value = curr.dropLast(fn.length)
-                        matchedFn = true
-                        break
-                    }
-                }
-                if (!matchedFn) {
-                    _expression.value = curr.dropLast(1)
+        val field = _expressionField.value
+        val curr = field.text
+        if (curr.isEmpty()) return
+
+        val selStart = field.selection.min.coerceIn(0, curr.length)
+        val selEnd = field.selection.max.coerceIn(0, curr.length)
+
+        // If user selected a span, delete the whole selection
+        if (selStart != selEnd) {
+            val next = curr.substring(0, selStart) + curr.substring(selEnd)
+            setExpressionWithCursor(next, selStart)
+            _calculationResult.value = null
+            computeLivePreview()
+            return
+        }
+
+        if (selStart == 0) return
+
+        val before = curr.substring(0, selStart)
+        val after = curr.substring(selStart)
+
+        val newBefore = if (before.endsWith("    ")) {
+            before.dropLast(4)
+        } else if (before.endsWith("  ")) {
+            before.dropLast(2)
+        } else if (before.endsWith("\n")) {
+            before.dropLast(1)
+        } else {
+            val fns = listOf(
+                " = ", "= ", "=", "asin(", "acos(", "atan(", "sinh(", "cosh(", "tanh(",
+                "sin(", "cos(", "tan(", "sqrt(", "cbrt(", "log2(", "log(", "ln(", "abs(",
+                "nCr(", "nPr(", "gcd(", "lcm(", "√(", "∛("
+            )
+            var matched: String? = null
+            for (fn in fns) {
+                if (before.endsWith(fn)) {
+                    matched = before.dropLast(fn.length)
+                    break
                 }
             }
+            matched ?: before.dropLast(1)
         }
+
+        setExpressionWithCursor(newBefore + after, newBefore.length)
+        _calculationResult.value = null
         computeLivePreview()
     }
 
     /**
-     * Inserts a newline (Enter / ↵) to start a new line in a multi-line expression.
+     * Inserts a newline (Enter / ↵) at cursor to start a new line in a multi-line expression.
      */
     fun onEnter() {
-        val curr = _expression.value
-        if (curr.isNotEmpty() && !curr.endsWith("\n")) {
-            _expression.value = "$curr\n"
+        val field = _expressionField.value
+        val curr = field.text
+        val selStart = field.selection.min.coerceIn(0, curr.length)
+        val selEnd = field.selection.max.coerceIn(0, curr.length)
+        if (curr.isNotEmpty() && !curr.substring(0, selStart).endsWith("\n")) {
+            val next = curr.substring(0, selStart) + "\n" + curr.substring(selEnd)
+            setExpressionWithCursor(next, selStart + 1)
+            _calculationResult.value = null
             computeLivePreview()
         }
     }
 
     /**
-     * Inserts a 2-space indentation (Indent / ⇥) for multi-line expressions.
+     * Inserts a 2-space indentation (Indent / ⇥) at cursor for multi-line expressions.
      */
     fun onIndent() {
-        val curr = _expression.value
-        _expression.value = "$curr  "
+        val field = _expressionField.value
+        val curr = field.text
+        val selStart = field.selection.min.coerceIn(0, curr.length)
+        val selEnd = field.selection.max.coerceIn(0, curr.length)
+        val next = curr.substring(0, selStart) + "  " + curr.substring(selEnd)
+        setExpressionWithCursor(next, selStart + 2)
+        _calculationResult.value = null
         computeLivePreview()
     }
 
@@ -929,7 +1110,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                     onEvaluate()
                     val res = _calculationResult.value?.formattedResult
                     if (res != null && !res.startsWith("Error")) {
-                        _expression.value = res.removePrefix("=").trim()
+                        val clean = res.removePrefix("=").trim()
+                        setExpressionWithCursor(clean, clean.length)
                         _calculationResult.value = null
                         computeLivePreview()
                     }
@@ -950,7 +1132,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             val clean = res.removePrefix("=").trim()
             if (clean.isNotEmpty()) {
                 onEvaluate()
-                _expression.value = clean
+                setExpressionWithCursor(clean, clean.length)
                 _calculationResult.value = null
                 computeLivePreview()
             }
@@ -1068,7 +1250,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     // History actions
     fun loadFromHistory(item: CalculationEntity) {
-        _expression.value = item.expression
+        setExpressionWithCursor(item.expression, item.expression.length)
         _angleMode.value = if (item.angleMode == "RAD") AngleMode.RAD else AngleMode.DEG
         onEvaluate()
         _currentDestination.value = AppNavDestination.CALCULATOR

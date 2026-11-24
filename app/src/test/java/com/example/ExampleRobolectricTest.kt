@@ -1,10 +1,14 @@
 package com.example
 
+import android.app.Application
 import android.content.Context
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.test.core.app.ApplicationProvider
 import com.example.math.AdvancedSolvers
 import com.example.math.AngleMode
 import com.example.math.MathEngine
+import com.example.ui.CalculatorViewModel
 import com.example.units.UnitCategory
 import com.example.units.UnitConverter
 import org.junit.Assert.*
@@ -180,5 +184,47 @@ class ExampleRobolectricTest {
         val finiteCalcRes = MathEngine.evaluateWithExplanation("sum(x, 1, 5, 3x + 2)", AngleMode.DEG)
         assertTrue(finiteCalcRes.isSuccess)
         assertEquals("55", finiteCalcRes.formattedResult)
+    }
+
+    @Test
+    fun `test cursor editing at tapped position and smart fraction button`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val vm = CalculatorViewModel(app)
+
+        // 1. Type "12+345" then tap between '3' and '4' (index 4) to insert '9'
+        "12+345".forEach { vm.onAppend(it.toString()) }
+        assertEquals("12+345", vm.expression.value)
+
+        vm.onExpressionFieldChange(TextFieldValue("12+345", TextRange(4)))
+        vm.onAppend("9")
+        assertEquals("12+3945", vm.expression.value)
+        assertEquals(5, vm.expressionField.value.selection.start)
+
+        // Backspace at cursor deletes '9' without wiping the trailing "45"
+        vm.onDelete()
+        assertEquals("12+345", vm.expression.value)
+        assertEquals(4, vm.expressionField.value.selection.start)
+
+        // 2. Smart fraction wrapping preceding operand: "2+3" -> tap a/b -> "2+(3)/()" -> type "4" -> "2+(3)/(4)"
+        vm.onClear()
+        "2+3".forEach { vm.onAppend(it.toString()) }
+        vm.onInsertFraction()
+        assertEquals("2+(3)/()", vm.expression.value)
+        vm.onAppend("4")
+        assertEquals("2+(3)/(4)", vm.expression.value)
+        assertEquals("= 2.75", vm.livePreview.value)
+
+        // 3. Fraction from empty state: tap a/b -> "()/()" with cursor in numerator
+        vm.onClear()
+        vm.onInsertFraction()
+        assertEquals("()/()", vm.expression.value)
+        "1+2".forEach { vm.onAppend(it.toString()) }
+        assertEquals("(1+2)/()", vm.expression.value)
+        vm.moveCursorRight() // past ')'
+        vm.moveCursorRight() // past '/'
+        vm.moveCursorRight() // inside '(' of denominator
+        "3+4".forEach { vm.onAppend(it.toString()) }
+        assertEquals("(1+2)/(3+4)", vm.expression.value)
+        assertEquals("= 0.4285714286", vm.livePreview.value)
     }
 }

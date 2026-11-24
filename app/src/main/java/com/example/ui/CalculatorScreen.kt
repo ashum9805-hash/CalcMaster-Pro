@@ -22,17 +22,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.ScrollState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.awaitCancellation
 import com.example.math.AngleMode
 import com.example.math.CalculationResult
 import com.example.math.MathEngine
@@ -47,6 +54,7 @@ fun CalculatorScreen(
     modifier: Modifier = Modifier
 ) {
     val expression by viewModel.expression.collectAsState()
+    val expressionField by viewModel.expressionField.collectAsState()
     val livePreview by viewModel.livePreview.collectAsState()
     val calculationResult by viewModel.calculationResult.collectAsState()
     val angleMode by viewModel.angleMode.collectAsState()
@@ -69,7 +77,9 @@ fun CalculatorScreen(
     val exprScrollState = rememberScrollState()
 
     LaunchedEffect(expression) {
-        exprScrollState.animateScrollTo(exprScrollState.maxValue)
+        if (expressionField.selection.end >= expression.length - 1) {
+            exprScrollState.animateScrollTo(exprScrollState.maxValue)
+        }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -265,7 +275,10 @@ fun CalculatorScreen(
 
                     // Display & Viewing Area
                     CalculatorDisplayArea(
-                        expression = expression,
+                        expressionField = expressionField,
+                        onExpressionFieldChange = { viewModel.onExpressionFieldChange(it) },
+                        onMoveCursorLeft = { viewModel.moveCursorLeft() },
+                        onMoveCursorRight = { viewModel.moveCursorRight() },
                         livePreview = livePreview,
                         calculationResult = calculationResult,
                         xVal = xVal,
@@ -369,7 +382,10 @@ fun CalculatorScreen(
 
                     if (physicsSubTab == 0) {
                         CalculatorDisplayArea(
-                            expression = expression,
+                            expressionField = expressionField,
+                            onExpressionFieldChange = { viewModel.onExpressionFieldChange(it) },
+                            onMoveCursorLeft = { viewModel.moveCursorLeft() },
+                            onMoveCursorRight = { viewModel.moveCursorRight() },
                             livePreview = livePreview,
                             calculationResult = calculationResult,
                             xVal = xVal,
@@ -460,7 +476,10 @@ fun CalculatorScreen(
                         )
                         else -> {
                             CalculatorDisplayArea(
-                                expression = expression,
+                                expressionField = expressionField,
+                                onExpressionFieldChange = { viewModel.onExpressionFieldChange(it) },
+                                onMoveCursorLeft = { viewModel.moveCursorLeft() },
+                                onMoveCursorRight = { viewModel.moveCursorRight() },
                                 livePreview = livePreview,
                                 calculationResult = calculationResult,
                                 xVal = xVal,
@@ -567,9 +586,13 @@ fun CalculatorScreen(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun CalculatorDisplayArea(
-    expression: String,
+    expressionField: TextFieldValue,
+    onExpressionFieldChange: (TextFieldValue) -> Unit,
+    onMoveCursorLeft: () -> Unit,
+    onMoveCursorRight: () -> Unit,
     livePreview: String?,
     calculationResult: CalculationResult?,
     xVal: Double,
@@ -583,28 +606,61 @@ private fun CalculatorDisplayArea(
     onShowMore: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val expression = expressionField.text
     Column(
         modifier = modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.Bottom
     ) {
         val lineCount = expression.count { it == '\n' } + 1
-        Text(
-            text = if (expression.isEmpty()) "0" else expression,
-            style = MaterialTheme.typography.headlineSmall.copy(
-                fontSize = if (lineCount > 2) 18.sp else if (expression.length > 20) 20.sp else 26.sp,
-                lineHeight = if (lineCount > 2) 24.sp else if (expression.length > 20) 26.sp else 32.sp
-            ),
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Medium,
-            color = if (expression.isEmpty()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.End,
-            maxLines = 6,
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(exprScrollState)
-                .testTag("calculator_expression_display")
-        )
+        val dynamicFontSize = if (lineCount > 2) 18.sp else if (expression.length > 20) 20.sp else 26.sp
+        val dynamicLineHeight = if (lineCount > 2) 24.sp else if (expression.length > 20) 26.sp else 32.sp
+
+        InterceptPlatformTextInput(
+            interceptor = { _, _ ->
+                // Suppress Android soft keyboard while keeping full tap-to-place-cursor & selection
+                awaitCancellation()
+            }
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(exprScrollState),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                if (expression.isEmpty()) {
+                    Text(
+                        text = "0",
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = dynamicFontSize,
+                            lineHeight = dynamicLineHeight
+                        ),
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.outline,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                BasicTextField(
+                    value = expressionField,
+                    onValueChange = onExpressionFieldChange,
+                    textStyle = TextStyle(
+                        fontSize = dynamicFontSize,
+                        lineHeight = dynamicLineHeight,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.End
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    maxLines = 6,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("calculator_expression_display")
+                )
+            }
+        }
 
         val displayResult = calculationResult?.formattedResult ?: livePreview
         if (!displayResult.isNullOrEmpty()) {
@@ -642,7 +698,45 @@ private fun CalculatorDisplayArea(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Cursor left / right precision nudge controls
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onMoveCursorLeft() }
+                        .testTag("btn_cursor_left")
+                ) {
+                    Text(
+                        text = "◀",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onMoveCursorRight() }
+                        .testTag("btn_cursor_right")
+                ) {
+                    Text(
+                        text = "▶",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
                 if (showVariables) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -652,21 +746,21 @@ private fun CalculatorDisplayArea(
                             .clickable { onEditVariable("x", MathEngine.formatNumber(xVal)) }
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "x = ${MathEngine.formatNumber(xVal)}",
+                                text = "x=${MathEngine.formatNumber(xVal)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            Spacer(modifier = Modifier.width(3.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "Edit x",
-                                modifier = Modifier.size(11.dp),
+                                modifier = Modifier.size(10.dp),
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -680,21 +774,21 @@ private fun CalculatorDisplayArea(
                             .clickable { onEditVariable("y", MathEngine.formatNumber(yVal)) }
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "y = ${MathEngine.formatNumber(yVal)}",
+                                text = "y=${MathEngine.formatNumber(yVal)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.secondary
                             )
-                            Spacer(modifier = Modifier.width(3.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "Edit y",
-                                modifier = Modifier.size(11.dp),
+                                modifier = Modifier.size(10.dp),
                                 tint = MaterialTheme.colorScheme.secondary
                             )
                         }
@@ -708,18 +802,14 @@ private fun CalculatorDisplayArea(
                             .clickable { onIndent() }
                             .testTag("chip_indent")
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "⇥ Indent",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = "⇥",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
                     }
                 } else {
                     Surface(
@@ -785,7 +875,7 @@ private fun MainKeypad(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        // Row 1: C, DEL, %, ÷
+        // Row 1: C, %, a/b (Fraction), DEL, ÷ (long-press /)
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalArrangement = Arrangement.spacedBy(5.dp)
@@ -798,13 +888,6 @@ private fun MainKeypad(
                 modifier = Modifier.weight(1f).testTag("btn_clear")
             )
             CalcButton(
-                icon = Icons.AutoMirrored.Filled.Backspace,
-                textColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                onClick = { viewModel.onDelete() },
-                modifier = Modifier.weight(1f).testTag("btn_backspace")
-            )
-            CalcButton(
                 text = "%",
                 textColor = MaterialTheme.colorScheme.primary,
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -812,10 +895,26 @@ private fun MainKeypad(
                 modifier = Modifier.weight(1f).testTag("btn_percent")
             )
             CalcButton(
+                text = "a/b",
+                textColor = MaterialTheme.colorScheme.secondary,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                onClick = { viewModel.onInsertFraction() },
+                onLongClick = { viewModel.onAppend("/") },
+                modifier = Modifier.weight(1f).testTag("btn_fraction")
+            )
+            CalcButton(
+                icon = Icons.AutoMirrored.Filled.Backspace,
+                textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                onClick = { viewModel.onDelete() },
+                modifier = Modifier.weight(1f).testTag("btn_backspace")
+            )
+            CalcButton(
                 text = "÷",
                 textColor = MaterialTheme.colorScheme.onPrimary,
                 containerColor = MaterialTheme.colorScheme.primary,
                 onClick = { viewModel.onAppend("÷") },
+                onLongClick = { viewModel.onAppend("/") },
                 modifier = Modifier.weight(1f).testTag("btn_divide")
             )
         }
